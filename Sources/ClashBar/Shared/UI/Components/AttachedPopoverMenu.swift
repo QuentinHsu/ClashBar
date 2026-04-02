@@ -148,11 +148,6 @@ struct AttachedPopoverMenu<Label: View, Content: View>: View {
 }
 
 struct AttachedPopoverMenuItem: View {
-    enum LeadingStyle {
-        case plain
-        case tile
-    }
-
     enum SelectionIndicatorPlacement {
         case leading
         case trailing
@@ -162,7 +157,6 @@ struct AttachedPopoverMenuItem: View {
     var subtitle: String?
     var leadingSymbol: String?
     var leadingTint: Color = .secondary
-    var leadingStyle: LeadingStyle = .plain
     var showLeadingDot: Bool = false
     var selected: Bool = false
     var selectionIndicatorPlacement: SelectionIndicatorPlacement = .leading
@@ -181,22 +175,10 @@ struct AttachedPopoverMenuItem: View {
                         .frame(width: 8, height: 8)
                         .frame(width: 12, alignment: .center)
                 } else if let leadingSymbol {
-                    if self.leadingStyle == .tile {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(self.leadingTint.opacity(0.14))
-                            .frame(width: 22, height: 22)
-                            .overlay {
-                                Image(systemName: leadingSymbol)
-                                    .font(.app(size: 11, weight: .semibold))
-                                    .foregroundStyle(self.leadingTint)
-                            }
-                            .frame(width: 22, alignment: .center)
-                    } else {
-                        Image(systemName: leadingSymbol)
-                            .font(.app(size: T.FontSize.caption, weight: .semibold))
-                            .foregroundStyle(self.leadingTint)
-                            .frame(width: 12, alignment: .center)
-                    }
+                    Image(systemName: leadingSymbol)
+                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(self.leadingTint)
+                        .frame(width: 12, alignment: .center)
                 } else if self.selectionIndicatorPlacement == .leading {
                     Image(systemName: "checkmark")
                         .font(.app(size: T.FontSize.caption, weight: .semibold))

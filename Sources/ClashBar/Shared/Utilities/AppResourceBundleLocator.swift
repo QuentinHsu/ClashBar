@@ -1,7 +1,7 @@
 import Foundation
 
 enum AppResourceBundleLocator {
-    private static let moduleBundleName = "CatBar_CatBar.bundle"
+    private static let moduleBundleName = "ClashBar_ClashBar.bundle"
 
     static func moduleBundle() -> Bundle? {
         for url in self.candidateModuleBundleURLs() {

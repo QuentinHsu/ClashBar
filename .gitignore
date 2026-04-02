@@ -14,5 +14,6 @@ skills-lock.json
 .swiftpm/
 .home/
 CLAUDE.md
+docs/
 Sources/ClashBar/Resources/bin/mihomo
 Fix*.md

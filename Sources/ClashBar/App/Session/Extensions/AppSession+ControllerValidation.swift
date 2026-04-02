@@ -90,11 +90,6 @@ extension AppSession {
         return launchController
     }
 
-    func restoreLocalControllerDisplayFromSelectedConfigIfAvailable() {
-        guard let configPath = self.configRepository.selectedConfig?.path else { return }
-        self.localExternalControllerDisplay = self.resolvedControllerFromSelectedConfigFile(configPath: configPath)
-    }
-
     private func parseExternalController(fromConfigAt configPath: String) -> String? {
         guard let raw = try? String(contentsOfFile: configPath, encoding: .utf8) else {
             return nil

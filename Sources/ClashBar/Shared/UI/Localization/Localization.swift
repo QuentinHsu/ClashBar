@@ -19,7 +19,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 }
 
 enum L10n {
-    private static let localeCacheKeyPrefix = "catbar.localization.locale."
+    private static let localeCacheKeyPrefix = "clashbar.localization.locale."
 
     static func t(_ key: String, language: AppLanguage, _ args: CVarArg...) -> String {
         self.t(key, language: language, args: args)

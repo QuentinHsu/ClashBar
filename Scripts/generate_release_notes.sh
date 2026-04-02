@@ -37,17 +37,8 @@ section = match.group(1).strip()
 sys.stdout.write(section)
 PY
 )" || {
-  previous_tag="$(
-    git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
-      | grep -Fxv "$tag" \
-      | head -n 1 || true
-  )"
-
-  python3 Scripts/update_changelog.py \
-    --version "$version" \
-    --from-ref "$previous_tag" \
-    --to-ref "$tag" \
-    --mode body
+  echo "Failed to find release notes for version ${version} in ${changelog_path}" >&2
+  exit 1
 }
 
 repo_url="https://github.com/${GITHUB_REPOSITORY}"
@@ -58,14 +49,13 @@ cat >"$output_path" <<EOF
 
 ${changelog_section}
 
-### 📥 下载地址
+### 📥 下载地址 (Downloads)
 
-- 当前发布仅提供无内核安装包。
-- 首次启动后，可在 CatBar 设置页打开内核目录并放入 \`mihomo\`。
+请根据您的 Mac 处理器芯片选择对应的版本下载（普通用户建议下载带有 **[内置内核]** 的版本）：
 
-| 平台架构 | 无内核安装包 |
-| :--- | :--- |
-| Apple Silicon (arm64) | [CatBar-${version}-apple-silicon-no-core.dmg](${download_base}/CatBar-${version}-apple-silicon-no-core.dmg) |
-| Intel (x86_64) | [CatBar-${version}-intel-no-core.dmg](${download_base}/CatBar-${version}-intel-no-core.dmg) |
+| 🖥 平台架构 (Architecture) | 📦 内置 Mihomo 内核 (默认推荐) | 🛠️ 无内核纯净版 (适合高阶用户) |
+| :--- | :--- | :--- |
+| ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M系列芯片-0071E3?style=flat-square&logo=apple&logoColor=white) | [ClashBar-${version}-apple-silicon.dmg](${download_base}/ClashBar-${version}-apple-silicon.dmg) | [ClashBar-${version}-apple-silicon-no-core.dmg](${download_base}/ClashBar-${version}-apple-silicon-no-core.dmg) |
+| ![Intel](https://img.shields.io/badge/Intel-x86__64-0071C5?style=flat-square&logo=intel&logoColor=white) | [ClashBar-${version}-intel.dmg](${download_base}/ClashBar-${version}-intel.dmg) | [ClashBar-${version}-intel-no-core.dmg](${download_base}/ClashBar-${version}-intel-no-core.dmg) |
 
 EOF

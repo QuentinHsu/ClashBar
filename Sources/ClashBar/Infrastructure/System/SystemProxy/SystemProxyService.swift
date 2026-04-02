@@ -26,7 +26,7 @@ enum SystemProxyServiceError: LocalizedError {
             return "Privileged helper not found in app bundle. Please rebuild and run the packaged app."
         case .helperRequiresInstallToApplications:
             return "Privileged helper can only be installed from /Applications. " +
-                "Move CatBar.app to /Applications and reopen it."
+                "Move ClashBar.app to /Applications and reopen it."
         case .helperNeedsApproval:
             return "Privileged helper requires approval in System Settings > Login Items."
         case let .helperNotRegistered(message):
@@ -115,7 +115,7 @@ struct SystemProxyService {
 
         switch self.attemptHelperRegistration() {
         case .ready:
-            _ = try? await self.waitForHelperResponsiveness()
+            _ = try? await self.triggerHelperDemandLaunchAndWait()
         case .needsApproval, .failed:
             return
         }
@@ -273,16 +273,20 @@ struct SystemProxyService {
     }
 
     private func ensureHelperProcessResponsive() async throws {
-        if try await self.waitForHelperResponsiveness() {
+        if try self.isHelperProcessRunning() {
+            return
+        }
+
+        if try await self.triggerHelperDemandLaunchAndWait() {
             return
         }
 
         try await self.reregisterHelper()
 
-        if try await self.waitForHelperResponsiveness() {
+        if try await self.triggerHelperDemandLaunchAndWait() {
             return
         }
-        
+
         throw SystemProxyServiceError.helperStartTimedOut
     }
 
@@ -409,17 +413,24 @@ struct SystemProxyService {
         try self.ensureHelperRegistered()
     }
 
-    private func waitForHelperResponsiveness() async throws -> Bool {
-        for attempt in 0..<self.helperLaunchRetryAttempts {
-            do {
-                try await self.invokeHelperPing()
-                return true
-            } catch {
-                if attempt < self.helperLaunchRetryAttempts - 1 {
-                    try await Task.sleep(nanoseconds: self.helperLaunchRetryDelayNanoseconds)
-                }
+    private func triggerHelperDemandLaunchAndWait() async throws -> Bool {
+        do {
+            try await self.invokeHelperPing()
+        } catch {
+            guard self.isHelperConnectionFailure(error) else {
+                throw error
             }
         }
+
+        for attempt in 0..<self.helperLaunchRetryAttempts {
+            if try self.isHelperProcessRunning() {
+                return true
+            }
+            if attempt < self.helperLaunchRetryAttempts - 1 {
+                try await Task.sleep(nanoseconds: self.helperLaunchRetryDelayNanoseconds)
+            }
+        }
+
         return false
     }
 
@@ -446,7 +457,7 @@ struct SystemProxyService {
     private func isHelperProcessRunning() throws -> Bool {
         let result = try self.runProcessSynchronously(
             executable: "/usr/bin/pgrep",
-            arguments: ["-f", ".*/\(ProxyHelperConstants.machServiceName)$"])
+            arguments: ["-x", ProxyHelperConstants.machServiceName])
         switch result.exitCode {
         case 0:
             return true

@@ -19,14 +19,6 @@ struct DefaultMaintenanceRepository: MaintenanceRepository, Sendable {
         try await self.transport.requestNoResponse(.flushDNSCache)
     }
 
-    func restartCore() async throws {
-        try await self.transport.requestNoResponse(.restartCore)
-    }
-
-    func updateGeoData() async throws {
-        try await self.transport.requestNoResponse(.updateGeoData)
-    }
-
     func fetchVersion() async throws -> VersionInfo {
         try await self.transport.request(.version)
     }

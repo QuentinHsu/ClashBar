@@ -43,31 +43,16 @@ struct SeparatedForEach<Element: Equatable, ID: Hashable, RowContent: View>: Vie
 struct MeasurementAwareVStack<Content: View>: View {
     let alignment: HorizontalAlignment
     let spacing: CGFloat
-    /// `false` avoids `LazyVStack` + `NSScrollView` layout bugs (large vertical gaps / crashes when combined
-    /// with certain Auto Layout setups). Use for bounded lists inside `ThinScrollContainer` (e.g. rules,
-    /// connections).
-    var usesLazyStack: Bool
     @ViewBuilder let content: Content
 
-    init(
-        alignment: HorizontalAlignment = .center,
-        spacing: CGFloat = 0,
-        usesLazyStack: Bool = true,
-        @ViewBuilder content: () -> Content)
-    {
+    init(alignment: HorizontalAlignment = .center, spacing: CGFloat = 0, @ViewBuilder content: () -> Content) {
         self.alignment = alignment
         self.spacing = spacing
-        self.usesLazyStack = usesLazyStack
         self.content = content()
     }
 
-    @ViewBuilder
     var body: some View {
-        if self.usesLazyStack {
-            LazyVStack(alignment: self.alignment, spacing: self.spacing) { self.content }
-        } else {
-            VStack(alignment: self.alignment, spacing: self.spacing) { self.content }
-        }
+        LazyVStack(alignment: self.alignment, spacing: self.spacing) { self.content }
     }
 }
 
@@ -226,9 +211,11 @@ extension MenuBarRootView {
             HStack(spacing: MenuBarLayoutTokens.space6) {
                 HStack(spacing: MenuBarLayoutTokens.space6) {
                     self.footerInfo(
-                        tr("ui.footer.core_mihomo", self.footerCoreVersionText),
+                        tr("ui.footer.core_mihomo", appSession.version),
                         url: mihomoRepositoryURL,
                         iconSystemName: mihomoSymbol)
+
+                    self.footerCoreUpgradeControl
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
@@ -239,20 +226,6 @@ extension MenuBarRootView {
             .menuRowPadding(vertical: MenuBarLayoutTokens.space2)
             .background(self.footerSurfaceBackground)
         }
-        .padding(.top, MenuBarLayoutTokens.space4)
-        .padding(.bottom, MenuBarLayoutTokens.space8)
-    }
-
-    var footerCoreVersionText: String {
-        if !self.appSession.isRemoteTarget && !self.appSession.hasDetectedCoreBinary {
-            return tr("ui.common.unknown")
-        }
-
-        guard let version = self.appSession.version.trimmedNonEmpty, version != "-" else {
-            return tr("ui.common.unknown")
-        }
-
-        return version
     }
 
     var footerSurfaceBackground: some View {
@@ -299,7 +272,7 @@ extension MenuBarRootView {
 
     var footerCoreUpgradeControl: some View {
         self.compactAsyncIconButton(
-            symbol: self.footerCoreUpgradeButtonSymbolName ?? "arrow.clockwise.circle",
+            symbol: self.footerCoreUpgradeButtonSymbolName ?? "arrow.down.circle",
             label: self.footerCoreUpgradeButtonTitle,
             tint: self.footerCoreUpgradeButtonTint,
             baseTint: self.nativeSecondaryLabel,
@@ -336,7 +309,7 @@ extension MenuBarRootView {
     var footerCoreUpgradeButtonSymbolName: String? {
         switch self.appSession.coreUpgradeState {
         case .idle:
-            "arrow.clockwise.circle"
+            "arrow.down.circle"
         case .running:
             nil
         case .succeeded:
@@ -397,51 +370,21 @@ extension MenuBarRootView {
     @ViewBuilder
     var footerVersionInfo: some View {
         if let update = self.appSession.availableAppUpdate {
-            if self.appUpdater.isConfigured {
-                Button {
-                    self.appUpdater.checkForUpdates()
-                } label: {
-                    self.footerVersionBadge(
-                        text: tr("ui.footer.version", update.displayVersion),
-                        symbol: "arrow.down.circle.fill",
-                        tint: self.nativeAccent.opacity(MenuBarLayoutTokens.Opacity.solid),
-                        emphasized: true)
-                }
-                .buttonStyle(.plain)
-                .help(tr("ui.footer.version_install_help", update.displayVersion))
-                .accessibilityLabel(tr(
-                    "ui.footer.version_update_accessibility",
-                    self.appSession.currentAppVersionText,
-                    update.displayVersion))
-            } else {
-                Link(destination: update.releaseURL) {
-                    self.footerVersionBadge(
-                        text: tr("ui.footer.version", update.displayVersion),
-                        symbol: "arrow.down.circle.fill",
-                        tint: self.nativeAccent.opacity(MenuBarLayoutTokens.Opacity.solid),
-                        emphasized: true)
-                }
-                .buttonStyle(.plain)
-                .help(tr("ui.footer.version_update_help", update.displayVersion))
-                .accessibilityLabel(tr(
-                    "ui.footer.version_update_accessibility",
-                    self.appSession.currentAppVersionText,
-                    update.displayVersion))
+            Link(destination: update.releaseURL) {
+                self.footerVersionBadge(
+                    text: tr("ui.footer.version", update.displayVersion),
+                    symbol: "arrow.down.circle.fill",
+                    tint: self.nativeAccent.opacity(MenuBarLayoutTokens.Opacity.solid),
+                    emphasized: true)
             }
+            .buttonStyle(.plain)
+            .help(tr("ui.footer.version_update_help", update.displayVersion))
+            .accessibilityLabel(tr(
+                "ui.footer.version_update_accessibility",
+                self.appSession.currentAppVersionText,
+                update.displayVersion))
         } else {
-            if self.appUpdater.isConfigured {
-                Button {
-                    self.appUpdater.checkForUpdates()
-                } label: {
-                    self.footerVersionBadge(
-                        text: tr("ui.footer.version", self.appSession.currentAppVersionText),
-                        symbol: "arrow.clockwise.circle",
-                        tint: self.nativeSecondaryLabel,
-                        emphasized: false)
-                }
-                .buttonStyle(.plain)
-                .help(tr("ui.footer.version_check_help"))
-            } else if let releaseIndexURL = self.appSession.appReleaseIndexURL {
+            if let releaseIndexURL = self.appSession.appReleaseIndexURL {
                 Link(destination: releaseIndexURL) {
                     self.footerVersionBadge(
                         text: tr("ui.footer.version", self.appSession.currentAppVersionText),
@@ -604,7 +547,7 @@ extension MenuBarRootView {
     }
 }
 
-private struct CompactAsyncIconButton: View {
+struct CompactAsyncIconButton: View {
     let symbol: String
     let tint: Color
     let baseTint: Color

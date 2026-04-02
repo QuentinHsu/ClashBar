@@ -4,6 +4,144 @@ import SwiftUI
 private typealias T = MenuBarLayoutTokens
 
 extension MenuBarRootView {
+    var proxyProvidersSection: some View {
+        let providers = appSession.sortedProxyProviderNames
+
+        return VStack(alignment: .leading, spacing: T.space6) {
+            self.nodesSectionHeader(
+                tr("ui.section.proxy_providers"),
+                symbol: "externaldrive.fill",
+                count: "\(providers.count)")
+
+            if providers.isEmpty {
+                emptyCard(tr("ui.empty.proxy_providers"))
+            } else {
+                VStack(spacing: T.space2) {
+                    ForEach(providers, id: \.self) { name in
+                        self.proxyProviderRow(name: name, detail: appSession.proxyProvidersDetail[name])
+                    }
+                }
+            }
+        }
+    }
+
+    func proxyProviderRow(name: String, detail: ProviderDetail?) -> some View {
+        let nodeCount = detail?.proxies?.count ?? 0
+        let updatedText = ValueFormatter.relativeTime(from: detail?.updatedAt, language: language)
+        let expireSeconds = detail?.subscriptionInfo?.expire
+        let expireText = ValueFormatter.daysUntilExpiryShort(from: expireSeconds, language: language)
+        let expireColor: Color = expireSeconds == 0 ? nativeSecondaryLabel : nativeWarning
+        let upload = detail?.subscriptionInfo?.upload
+        let download = detail?.subscriptionInfo?.download
+        let total = detail?.subscriptionInfo?.total
+        let usedRatio: Double? = {
+            guard let total, total > 0, let upload, let download else { return nil }
+            let used = upload + download
+            return min(max(Double(used) / Double(total), 0), 1)
+        }()
+        let rowHorizontalPadding = T.space4
+        let isUpdating = appSession.providerUpdating.contains(name)
+        let hovered = hoveredProviderName == name
+        // Fixed width for update time — ensures vertical alignment across rows
+        let updateTimeWidth: CGFloat = 44
+
+        let hasSubscription = detail?.subscriptionInfo != nil
+
+        return VStack(alignment: .leading, spacing: T.space6) {
+            // Row 1: icon | name + node badge | time (fixed) | refresh btn
+            HStack(alignment: .center, spacing: T.space6) {
+                Image(systemName: "externaldrive.fill")
+                    .font(.app(size: T.FontSize.caption, weight: .semibold))
+                    .foregroundStyle(nativeTeal.opacity(T.Opacity.solid))
+                    .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon)
+
+                HStack(alignment: .center, spacing: T.space4) {
+                    HStack(alignment: .center, spacing: T.space4) {
+                        Text(name)
+                            .font(.app(size: T.FontSize.body, weight: .semibold))
+                            .foregroundStyle(nativePrimaryLabel)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+
+                        Text("\(nodeCount)")
+                            .font(.app(size: T.FontSize.caption, weight: .semibold))
+                            .foregroundStyle(nativeSecondaryLabel)
+                            .fixedSize()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(updatedText)
+                        .font(.app(size: T.FontSize.caption, weight: .regular))
+                        .foregroundStyle(nativeTertiaryLabel)
+                        .lineLimit(1)
+                        .frame(width: updateTimeWidth, alignment: .trailing)
+                }
+                .frame(maxWidth: .infinity)
+
+                Button {
+                    Task { await appSession.updateProxyProvider(name: name) }
+                } label: {
+                    ZStack {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.app(size: T.FontSize.caption, weight: .semibold))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(nativeSecondaryLabel)
+                            .opacity(isUpdating ? 0 : 1)
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .opacity(isUpdating ? 1 : 0)
+                    }
+                    .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tr("ui.action.refresh"))
+            }
+
+            // Row 2 (subscription only): indented to align with Row 1 center content
+            if hasSubscription {
+                VStack(alignment: .leading, spacing: T.space2) {
+                    HStack(spacing: 0) {
+                        Text(expireText)
+                            .font(.app(size: T.FontSize.caption, weight: .regular))
+                            .foregroundStyle(expireColor)
+                        Spacer(minLength: T.space4)
+                        if let upload, let download, let total {
+                            let used = upload + download
+                            let quotaText =
+                                "\(ValueFormatter.bytesCompactNoSpace(used)) / " +
+                                "\(ValueFormatter.bytesCompactNoSpace(total))"
+                            Text(quotaText)
+                                .font(.app(size: T.FontSize.caption, weight: .regular))
+                                .foregroundStyle(nativeSecondaryLabel)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    if let usedRatio {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(nativeControlFill.opacity(T.Opacity.solid))
+                                Capsule()
+                                    .fill((usedRatio >= 0.9 ? nativeCritical : usedRatio >= 0.75 ? nativeWarning :
+                                            nativeAccent).opacity(T.Opacity.solid))
+                                    .frame(width: geo.size.width * usedRatio)
+                            }
+                        }
+                        .frame(height: T.space6)
+                    }
+                }
+                .padding(.leading, T.rowLeadingIcon + T.space6)
+                .padding(.trailing, T.rowLeadingIcon + T.space6)
+            }
+        }
+        .padding(.horizontal, rowHorizontalPadding)
+        .padding(.vertical, T.space6)
+        .background(nativeHoverRowBackground(hovered))
+        .onHover { hoveredProviderName = self.nextHovered(
+            current: hoveredProviderName,
+            target: name,
+            isHovering: $0) }
+    }
 
     enum ProviderAction {
         case healthcheck
@@ -11,7 +149,7 @@ extension MenuBarRootView {
 
         var symbol: String {
             switch self {
-            case .healthcheck: "bolt.horizontal"
+            case .healthcheck: "gauge.with.dots.needle.50percent"
             case .refresh: "arrow.triangle.2.circlepath"
             }
         }
@@ -41,25 +179,14 @@ extension MenuBarRootView {
             action: action)
     }
 
-    @ViewBuilder
-    func providerUpdateStatusIndicator(isLoading: Bool) -> some View {
-        if isLoading {
-            ProgressView()
-                .controlSize(.mini)
-                .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon, alignment: .center)
-        } else {
-            Color.clear
-                .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon)
-        }
-    }
-
-    func proxyGroupsSection(isMeasuring: Bool = false) -> some View {
+    var proxyGroupsSection: some View {
         // Use @State filteredProxyGroups which is updated via .onChange — avoids filtering on every render
         let groups = rootViewModel.filteredProxyGroups
 
-        return MeasurementAwareVStack(alignment: .leading, spacing: T.space6, usesLazyStack: false) {
+        return VStack(alignment: .leading, spacing: T.space6) {
             self.nodesSectionHeader(
                 tr("ui.section.proxy_groups"),
+                symbol: "point.3.connected.trianglepath.dotted",
                 count: "\(groups.count)")
             {
                 HStack(spacing: T.space6) {
@@ -96,7 +223,7 @@ extension MenuBarRootView {
                                 : "ui.action.hide_hidden_proxy_groups"))
 
                     self.compactTopIcon(
-                        "bolt.horizontal",
+                        "gauge",
                         label: tr("ui.action.test_latency"),
                         toneOverride: nativeTeal)
                     {
@@ -109,7 +236,7 @@ extension MenuBarRootView {
             if groups.isEmpty {
                 emptyCard(tr("ui.empty.proxy_groups"))
             } else {
-                MeasurementAwareVStack(spacing: T.space2, usesLazyStack: false) {
+                VStack(spacing: T.space2) {
                     ForEach(groups, id: \.name) { group in
                         self.proxyGroupInlineRow(group)
                     }
@@ -120,8 +247,14 @@ extension MenuBarRootView {
 
     func proxyGroupInlineRow(_ group: ProxyGroup) -> some View {
         let currentNode = group.now ?? tr("ui.common.na")
-        let delayText = appSession.groupDisplayDelayText(group)
-        let delayValue = appSession.groupDisplayDelayValue(group)
+        let delayText = appSession.delayText(
+            group: group.name,
+            node: currentNode,
+            fallbackToGroupHistory: true)
+        let delayValue = appSession.delayValue(
+            group: group.name,
+            node: currentNode,
+            fallbackToGroupHistory: true)
         let nodeCount = group.all.count
         let iconURL = self.proxyGroupIconURL(group)
         let hasLeadingIcon = iconURL != nil
@@ -166,7 +299,7 @@ extension MenuBarRootView {
 
                     self.providerActionButton(
                         .healthcheck,
-                        isLoading: appSession.isLatencyTesting(group: group))
+                        isLoading: appSession.groupLatencyLoading.contains(group.name))
                     {
                         await appSession.refreshGroupLatency(group)
                     }
@@ -188,14 +321,6 @@ extension MenuBarRootView {
                 if let iconURL {
                     self.proxyGroupLeadingIcon(iconURL)
                 }
-            } trailing: {
-                self.providerActionButton(
-                    .healthcheck,
-                    isLoading: appSession.isLatencyTesting(group: group))
-                {
-                    await appSession.refreshGroupLatency(group)
-                }
-                .frame(width: 18, alignment: .center)
             }
 
             let nodes = sortGroupNodesByLatency
@@ -208,16 +333,12 @@ extension MenuBarRootView {
                     delayText: appSession.delayText(group: group.name, node: node),
                     delayValue: appSession.delayValue(group: group.name, node: node),
                     delayColor: latencyColor(appSession.delayValue(group: group.name, node: node)),
-                    isTesting: appSession.isLatencyTesting(group: group, nodeName: node),
-                    selected: node == group.now,
-                    action: {
-                        dismiss()
-                        Task { await appSession.switchProxy(group: group.name, target: node) }
-                    },
-                    testAction: {
-                        Task { await appSession.testSingleNodeLatencyWithLoading(nodeName: node, groupName: group.name) }
-                    }
-                )
+                    isTesting: false,
+                    selected: node == group.now)
+                {
+                    dismiss()
+                    Task { await appSession.switchProxy(group: group.name, target: node) }
+                }
             }
         }
     }
@@ -264,20 +385,18 @@ extension MenuBarRootView {
 
     func nodesSectionHeader(
         _ title: String,
-        symbol: String? = nil,
+        symbol: String,
         count: String? = nil,
         @ViewBuilder trailing: () -> some View = { EmptyView() }) -> some View
     {
         HStack(spacing: T.space6) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.app(size: T.FontSize.caption, weight: .semibold))
-                    .foregroundStyle(nativeTertiaryLabel)
-                    .frame(
-                        width: T.rowLeadingIcon,
-                        height: T.rowLeadingIcon,
-                        alignment: .center)
-            }
+            Image(systemName: symbol)
+                .font(.app(size: T.FontSize.caption, weight: .semibold))
+                .foregroundStyle(nativeTertiaryLabel)
+                .frame(
+                    width: T.rowLeadingIcon,
+                    height: T.rowLeadingIcon,
+                    alignment: .center)
 
             Text(title)
                 .font(.app(size: T.FontSize.body, weight: .bold))
@@ -307,8 +426,7 @@ extension MenuBarRootView {
     func popoverHeader(
         name: String,
         count: Int,
-        @ViewBuilder leading: () -> some View = { EmptyView() },
-        @ViewBuilder trailing: () -> some View = { EmptyView() }) -> some View
+        @ViewBuilder leading: () -> some View = { EmptyView() }) -> some View
     {
         VStack(spacing: 0) {
             HStack(spacing: T.space1) {
@@ -327,8 +445,6 @@ extension MenuBarRootView {
                     .padding(.horizontal, T.space4)
                     .padding(.vertical, T.space1)
                     .background(nativeBadgeCapsule())
-                
-                trailing()
             }
             .padding(.horizontal, T.space4)
             .padding(.bottom, T.space2)
@@ -370,7 +486,6 @@ private struct ProxyGroupPopoverNodeItem: View {
     let isTesting: Bool
     let selected: Bool
     let action: () -> Void
-    var testAction: (() -> Void)? = nil
 
     @State private var isHovered = false
 
@@ -408,14 +523,6 @@ private struct ProxyGroupPopoverNodeItem: View {
                 Group {
                     if self.isTesting {
                         LatencyLoadingIndicator()
-                    } else if self.isHovered, let testAction = self.testAction {
-                        Button(action: testAction) {
-                            Image(systemName: "bolt.horizontal")
-                                .font(.app(size: T.FontSize.caption, weight: .semibold))
-                                .foregroundStyle(Color(nsColor: .systemTeal).opacity(T.Opacity.solid))
-                        }
-                        .buttonStyle(.plain)
-                        .frame(height: 14)
                     } else {
                         self.delayMetricView
                     }

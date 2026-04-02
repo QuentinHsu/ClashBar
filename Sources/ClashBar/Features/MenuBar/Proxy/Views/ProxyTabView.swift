@@ -47,18 +47,31 @@ extension MenuBarRootView {
             : self.nativeInfo.opacity(T.Opacity.solid)
     }
 
+    func configMenuSubtitle(state: RemoteConfigMenuState?) -> String? {
+        guard let state else { return nil }
+        return state.updatedAt.map(ValueFormatter.dateTime) ?? "--"
+    }
+
     @ViewBuilder
     func configMenuContent(dismiss: @escaping () -> Void) -> some View {
         ForEach(appSession.availableConfigFileNames, id: \.self) { name in
-            AttachedPopoverMenuItem(
+            let remoteState = self.appSession.remoteConfigMenuState(for: name)
+
+            ConfigMenuItemView(
                 title: name,
+                subtitle: self.configMenuSubtitle(state: self.isRemoteConfigFile(name) ? remoteState : nil),
                 leadingSymbol: self.configMenuLeadingSymbol(for: name),
                 leadingTint: self.configMenuLeadingTint(for: name),
                 selected: name == appSession.selectedConfigName,
-                selectionIndicatorPlacement: .trailing)
+                refreshPhase: self.isRemoteConfigFile(name) ? remoteState.phase : nil,
+                refreshHelpText: tr("ui.action.refresh"),
+                refreshingAccessibilityLabel: tr("ui.quick.remote.refreshing"),
+                refreshFailedHelpText: tr("ui.quick.remote.refresh_failed"))
             {
                 dismiss()
                 Task { await appSession.selectConfigFile(named: name) }
+            } onRefresh: {
+                Task { await appSession.refreshRemoteConfigFile(named: name) }
             }
         }
         AttachedPopoverMenuDivider()
@@ -104,13 +117,15 @@ extension MenuBarRootView {
         }
     }
 
-    func proxyTabBody(isMeasuring: Bool = false) -> some View {
-        MeasurementAwareVStack(alignment: .leading, spacing: T.space6, usesLazyStack: false) {
+    var proxyTabBody: some View {
+        VStack(alignment: .leading, spacing: T.space6) {
             self.trafficOverview
             self.proxyQuickRows
-            self.proxyGroupsSection(isMeasuring: isMeasuring)
+            if !appSession.sortedProxyProviderNames.isEmpty {
+                proxyProvidersSection
+            }
+            proxyGroupsSection
         }
-
         .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -126,7 +141,7 @@ extension MenuBarRootView {
                 .padding(.horizontal, sparklineHorizontalInset)
 
             VStack(spacing: 0) {
-                HStack(spacing: T.space2) {
+                HStack(spacing: T.space6) {
                     self.cornerMetric(
                         symbol: "link",
                         value: "\(connectionsStore.connectionsCount)",
@@ -134,14 +149,10 @@ extension MenuBarRootView {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     self.cornerMetric(
-                        symbol: "arrow.up",
-                        value: ValueFormatter.speed(appSession.traffic.up),
-                        color: nativeInfo)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    self.cornerMetric(
                         symbol: "arrow.up.circle",
-                        value: ValueFormatter.bytesOrDash(appSession.displayUpTotal),
+                        value: ValueFormatter.speedAndTotal(
+                            rate: appSession.traffic.up,
+                            total: appSession.displayUpTotal),
                         color: nativeInfo,
                         iconTrailing: true)
                         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -149,7 +160,7 @@ extension MenuBarRootView {
 
                 Spacer(minLength: 0)
 
-                HStack(spacing: T.space2) {
+                HStack(spacing: T.space6) {
                     self.cornerMetric(
                         symbol: "memorychip",
                         value: ValueFormatter.bytesInteger(appSession.memory.inuse),
@@ -157,14 +168,10 @@ extension MenuBarRootView {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     self.cornerMetric(
-                        symbol: "arrow.down",
-                        value: ValueFormatter.speed(appSession.traffic.down),
-                        color: nativePositive.opacity(T.Opacity.solid))
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    self.cornerMetric(
                         symbol: "arrow.down.circle",
-                        value: ValueFormatter.bytesOrDash(appSession.displayDownTotal),
+                        value: ValueFormatter.speedAndTotal(
+                            rate: appSession.traffic.down,
+                            total: appSession.displayDownTotal),
                         color: nativePositive.opacity(T.Opacity.solid),
                         iconTrailing: true)
                         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -198,31 +205,91 @@ extension MenuBarRootView {
     }
 
     var proxyQuickRows: some View {
-        let showsLocalOnlyItems = !appSession.isRemoteTarget
+        let localTargetDisplay = self.appSession.localProxyCommandTargetDisplay()
+        let managedTargetDisplay = self.appSession.managedEndpointProxyCommandTargetDisplay()
+        let showManagedTargetAction = localTargetDisplay != managedTargetDisplay
 
         return VStack(spacing: 0) {
-            if showsLocalOnlyItems {
-                AttachedPopoverMenu { _ in
-                    self.quickRowContent(
-                        title: tr("ui.quick.switch_config"),
-                        symbol: "doc.text",
-                        foreground: nativePurple)
+            if appSession.isRemoteTarget {
+                self.quickRowContent(
+                    title: tr("ui.quick.switch_config"),
+                    symbol: "doc.text",
+                    foreground: nativePurple)
+                {
+                    Text(tr("ui.machine.remote_readonly"))
+                        .font(.app(size: T.FontSize.caption, weight: .regular))
+                        .lineLimit(1)
+                        .foregroundStyle(nativeTertiaryLabel)
+                }
+            } else {
+                AttachedPopoverMenu(
+                    onWillPresent: {
+                        self.appSession.refreshRemoteConfigMenuStates()
+                    },
+                    label: { _ in
+                        self.quickRowContent(
+                            title: tr("ui.quick.switch_config"),
+                            symbol: "doc.text",
+                            foreground: nativePurple)
+                        {
+                            HStack(spacing: T.space2) {
+                                Text(appSession.selectedConfigName)
+                                    .font(.app(size: T.FontSize.caption, weight: .regular))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .foregroundStyle(nativeSecondaryLabel)
+                                Image(systemName: "chevron.right")
+                                    .font(.app(size: T.FontSize.caption, weight: .medium))
+                                    .foregroundStyle(nativeTertiaryLabel)
+                            }
+                        }
+                    },
+                    content: { dismiss in
+                        self.configMenuContent(dismiss: dismiss)
+                    })
+                    .buttonStyle(.plain)
+            }
+
+            self.systemProxyQuickToggleRow
+
+            self.quickToggleRow(
+                title: tr("ui.quick.tun_mode"),
+                symbol: "shield.lefthalf.filled",
+                foreground: nativePositive,
+                isDisabled: !appSession.isTunToggleEnabled,
+                isOn: Binding(
+                    get: { appSession.isTunEnabled },
+                    set: { value in
+                        Task { await appSession.toggleTunMode(value) }
+                    }))
+
+            self.quickRowContent(
+                title: tr("ui.quick.copy_terminal"),
+                symbol: "terminal",
+                foreground: nativeWarning,
+                trailingFitsContent: true)
+            {
+                HStack(spacing: 2) {
+                    self.proxyCommandActionButton(
+                        title: self.appSession.localProxyCommandHostDisplay(),
+                        target: .local,
+                        helpTitle: tr("ui.quick.copy_terminal"),
+                        helpDetail: localTargetDisplay)
                     {
-                        HStack(spacing: T.space2) {
-                            Text(appSession.selectedConfigName)
-                                .font(.app(size: T.FontSize.caption, weight: .regular))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .foregroundStyle(nativeSecondaryLabel)
-                            Image(systemName: "chevron.right")
-                                .font(.app(size: T.FontSize.caption, weight: .medium))
-                                .foregroundStyle(nativeTertiaryLabel)
+                        self.appSession.copyLocalProxyCommand()
+                    }
+
+                    if showManagedTargetAction {
+                        self.proxyCommandActionButton(
+                            title: self.appSession.managedEndpointProxyCommandHostDisplay(),
+                            target: .currentEndpoint,
+                            helpTitle: tr("ui.quick.copy_terminal_current_endpoint"),
+                            helpDetail: managedTargetDisplay)
+                        {
+                            self.appSession.copyManagedEndpointProxyCommand()
                         }
                     }
-                } content: { dismiss in
-                    self.configMenuContent(dismiss: dismiss)
                 }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -247,29 +314,19 @@ extension MenuBarRootView {
                 action()
             }
         } label: {
-            HStack(spacing: T.space6) {
-                VStack(alignment: .leading, spacing: T.space1) {
-                    Text(helpTitle)
-                        .font(.app(size: T.FontSize.caption, weight: .semibold))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .foregroundStyle(foreground)
-                    Text(title)
-                        .font(.app(size: T.FontSize.caption, weight: .medium))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .minimumScaleFactor(T.minimumScale)
-                        .monospacedDigit()
-                        .foregroundStyle(self.nativeTertiaryLabel)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
+            HStack(spacing: T.space4) {
+                Text(title)
+                    .font(.app(size: T.FontSize.caption, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .minimumScaleFactor(T.minimumScale)
+                    .monospacedDigit()
+                    .foregroundStyle(foreground)
                 Image(systemName: copied ? "checkmark.circle.fill" : "doc.on.doc")
                     .font(.app(size: T.FontSize.caption, weight: .semibold))
                     .foregroundStyle(iconForeground)
             }
-            .padding(.horizontal, T.space6)
-            .padding(.vertical, T.space4)
+            .padding(T.space2)
             .background {
                 Capsule(style: .continuous)
                     .fill(copied ? self.nativePositive.opacity(T.Opacity.tint) : self.nativeBadgeFill)
@@ -325,7 +382,10 @@ extension MenuBarRootView {
     }
 
     var systemProxyRowTitle: String {
-        tr("ui.quick.system_proxy")
+        if let scopeLabel = self.systemProxyScopeLabel {
+            return "\(tr("ui.quick.system_proxy")) (\(scopeLabel))"
+        }
+        return tr("ui.quick.system_proxy")
     }
 
     var systemProxyRowDetailColor: Color {
@@ -335,12 +395,90 @@ extension MenuBarRootView {
         return nativeSecondaryLabel
     }
 
+    var systemProxyQuickToggleRow: some View {
+        HStack(spacing: T.space6) {
+            self.systemProxyCompositeIcon
+            HStack(spacing: T.space2) {
+                Text(self.systemProxyRowTitle)
+                    .font(.app(size: T.FontSize.body, weight: .medium))
+                    .foregroundStyle(nativePrimaryLabel)
+                    .lineLimit(1)
+                    .minimumScaleFactor(T.minimumScale)
+
+                if self.shouldShowSystemProxyRemoteWarning {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(nativeWarning.opacity(T.Opacity.solid))
+                        .help(tr("ui.system_proxy.remote_target_warning"))
+                        .accessibilityLabel(tr("ui.system_proxy.remote_target_warning"))
+                }
+            }
+
+            if let detailText = self.systemProxyRowDetailText {
+                Text(detailText)
+                    .font(.app(size: T.FontSize.caption, weight: .medium))
+                    .foregroundStyle(self.systemProxyRowDetailColor)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .minimumScaleFactor(T.minimumScale)
+            }
+
+            Spacer(minLength: 0)
+            Toggle("", isOn: Binding(
+                get: { appSession.isSystemProxyEnabled },
+                set: { value in
+                    Task { await appSession.toggleSystemProxy(value) }
+                }))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .disabled(appSession.isProxySyncing)
+                .frame(width: 50, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, T.space4)
+        .padding(.vertical, T.space2)
+    }
 
     var systemProxyInlineFailureText: String? {
         guard !self.appSession.isSystemProxyEnabled else { return nil }
         return self.appSession.systemProxyOpenFailureHint?.trimmedNonEmpty
     }
 
+    var systemProxyScopeLabel: String? {
+        if self.appSession.isSystemProxyUsingRemoteCore {
+            return tr("ui.machine.remote_label")
+        }
+        if self.appSession.isRemoteTarget {
+            return tr("ui.machine.local_label")
+        }
+        return nil
+    }
+
+    var shouldShowSystemProxyRemoteWarning: Bool {
+        self.appSession.isSystemProxyUsingRemoteCore
+    }
+
+    func quickToggleRow(
+        title: String,
+        symbol: String,
+        foreground: Color,
+        isDisabled: Bool,
+        isOn: Binding<Bool>) -> some View
+    {
+        self.quickRowContent(
+            title: title,
+            symbol: symbol,
+            foreground: foreground,
+            trailingWidth: 50)
+        {
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .disabled(isDisabled)
+        }
+    }
 
     func quickIcon(symbol: String, foreground: Color) -> some View {
         Image(systemName: symbol)
@@ -349,4 +487,211 @@ extension MenuBarRootView {
             .frame(width: 18, height: 18, alignment: .center)
     }
 
+    var systemProxyCompositeIcon: some View {
+        ZStack {
+            self.systemProxyCompositeIconLayer(
+                tint: self.systemProxyBackgroundActivityTint,
+                alignment: .leading)
+            self.systemProxyCompositeIconLayer(
+                tint: self.systemProxyHelperProcessTint,
+                alignment: .trailing)
+        }
+        .frame(width: 18, height: 18)
+        .help(self.systemProxyCompositeIconHelp)
+    }
+
+    func systemProxyCompositeIconLayer(tint: Color, alignment: Alignment) -> some View {
+        Image(systemName: "network")
+            .font(.app(size: T.FontSize.body, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 18, height: 18)
+            .mask(alignment: alignment) {
+                Rectangle()
+                    .frame(width: 9)
+            }
+    }
+
+    var systemProxyBackgroundActivityTint: Color {
+        switch self.appSession.systemProxyBackgroundActivityAllowed {
+        case .some(true):
+            nativePositive.opacity(T.Opacity.solid)
+        case .some(false):
+            nativeCritical.opacity(T.Opacity.solid)
+        case .none:
+            nativeSecondaryLabel
+        }
+    }
+
+    var systemProxyHelperProcessTint: Color {
+        switch self.appSession.systemProxyHelperProcessRunning {
+        case .some(true):
+            nativePositive.opacity(T.Opacity.solid)
+        case .some(false):
+            nativeWarning.opacity(T.Opacity.solid)
+        case .none:
+            nativeSecondaryLabel
+        }
+    }
+
+    var systemProxyBackgroundActivityHelp: String {
+        let value = switch self.appSession.systemProxyBackgroundActivityAllowed {
+        case .some(true):
+            tr("ui.system_proxy.background_activity.allowed")
+        case .some(false):
+            tr("ui.system_proxy.background_activity.blocked")
+        case .none:
+            tr("ui.common.unknown")
+        }
+        return "\(tr("ui.system_proxy.background_activity")): \(value)"
+    }
+
+    var systemProxyHelperProcessHelp: String {
+        let value = switch self.appSession.systemProxyHelperProcessRunning {
+        case .some(true):
+            tr("ui.system_proxy.helper_process.running")
+        case .some(false):
+            tr("ui.system_proxy.helper_process.stopped")
+        case .none:
+            tr("ui.common.unknown")
+        }
+        return "\(tr("ui.system_proxy.helper_process")): \(value)"
+    }
+
+    var systemProxyCompositeIconHelp: String {
+        "\(self.systemProxyBackgroundActivityHelp)\n\(self.systemProxyHelperProcessHelp)"
+    }
+}
+
+private struct ConfigMenuItemView: View {
+    let title: String
+    let subtitle: String?
+    let leadingSymbol: String?
+    let leadingTint: Color
+    let selected: Bool
+    let refreshPhase: RemoteConfigRefreshPhase?
+    let refreshHelpText: String
+    let refreshingAccessibilityLabel: String
+    let refreshFailedHelpText: String
+    let onSelect: () -> Void
+    let onRefresh: (() -> Void)?
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: T.space6) {
+            Button(action: self.onSelect) {
+                HStack(alignment: .center, spacing: T.space6) {
+                    if let leadingSymbol {
+                        Image(systemName: leadingSymbol)
+                            .font(.app(size: T.FontSize.caption, weight: .semibold))
+                            .foregroundStyle(self.leadingSymbolForeground)
+                            .frame(width: 12, alignment: .center)
+                    }
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(self.title)
+                            .font(.app(size: T.FontSize.body, weight: self.selected ? .semibold : .medium))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundStyle(self.primaryTextColor)
+
+                        if let subtitle, !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.app(size: T.FontSize.caption, weight: .regular))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .monospacedDigit()
+                                .foregroundStyle(self.secondaryTextColor)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if let refreshPhase, let onRefresh {
+                self.refreshControl(phase: refreshPhase, onRefresh: onRefresh)
+            }
+        }
+        .padding(.horizontal, T.space6)
+        .padding(.vertical, T.space2)
+        .background(
+            RoundedRectangle(cornerRadius: T.cornerRadius, style: .continuous)
+                .fill(self.rowBackground))
+        .contentShape(Rectangle())
+        .onHover { self.isHovered = $0 }
+    }
+
+    private func refreshControl(
+        phase: RemoteConfigRefreshPhase,
+        onRefresh: @escaping () -> Void) -> some View
+    {
+        let failureTint = Color(nsColor: .systemRed)
+        let helpText: String
+        let tint: Color
+        let baseTint: Color
+        let isLoading = phase == .refreshing
+
+        switch phase {
+        case .idle:
+            helpText = self.refreshHelpText
+            tint = Color(nsColor: .controlAccentColor)
+            baseTint = self.secondaryTextColor
+        case .refreshing:
+            helpText = self.refreshingAccessibilityLabel
+            tint = self.secondaryTextColor
+            baseTint = self.secondaryTextColor
+        case .failed:
+            helpText = self.refreshFailedHelpText
+            tint = failureTint
+            baseTint = failureTint.opacity(0.92)
+        }
+
+        return CompactAsyncIconButton(
+            symbol: "arrow.clockwise",
+            tint: tint,
+            baseTint: baseTint,
+            role: nil,
+            isLoading: isLoading,
+            size: 20,
+            fontSize: T.FontSize.body,
+            hierarchicalSymbol: false,
+            action: { onRefresh() })
+            .help(helpText)
+            .accessibilityLabel(helpText)
+    }
+
+    private var primaryTextColor: Color {
+        if self.isHovered {
+            return Color(nsColor: .selectedMenuItemTextColor)
+        }
+        return .primary
+    }
+
+    private var secondaryTextColor: Color {
+        if self.isHovered {
+            return Color(nsColor: .selectedMenuItemTextColor).opacity(0.88)
+        }
+        return self.selected ? .primary.opacity(0.72) : .secondary
+    }
+
+    private var leadingSymbolForeground: Color {
+        if self.isHovered {
+            return Color(nsColor: .selectedMenuItemTextColor)
+        }
+        return self.leadingTint
+    }
+
+    private var rowBackground: Color {
+        if self.isHovered {
+            return Color(nsColor: .selectedContentBackgroundColor)
+        }
+        if self.selected {
+            return Color(nsColor: .selectedContentBackgroundColor).opacity(0.34)
+        }
+        return .clear
+    }
 }

@@ -7,7 +7,8 @@ final class StatusItemContentView: NSView {
     private let brandIconRenderSize: CGFloat = 24
     private let symbolPointSize: CGFloat = 20
     private let iconTextSpacing: CGFloat = 0
-    private let textContainerWidth: CGFloat = 50
+    // Keep a small buffer so values like "12.3M↑" do not clip in the menu bar.
+    private let textContainerWidth: CGFloat = 38
     private let textLineHeight: CGFloat = 11
 
     private let iconView: NSImageView = {
@@ -62,8 +63,7 @@ final class StatusItemContentView: NSView {
             mode: .iconOnly,
             symbolName: "bolt.slash.circle",
             speedLines: nil,
-            isRunning: false,
-            isProcessing: false)
+            isRunning: false)
         switch display.mode {
         case .iconOnly:
             return self.statusItemHorizontalPadding * 2 + self.iconSize
@@ -95,7 +95,7 @@ final class StatusItemContentView: NSView {
                 previousSymbolName != symbolName ||
                 self.currentDisplay?.mode != previousMode
             {
-                let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "CatBar")
+                let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "ClashBar")
                 let config = NSImage.SymbolConfiguration(pointSize: self.symbolPointSize, weight: .semibold)
                 self.iconView.image = image?.withSymbolConfiguration(config)
             }
@@ -122,11 +122,6 @@ final class StatusItemContentView: NSView {
         if speedTextChanged || modeChanged, display.mode != .iconOnly {
             self.speedImageView.image = self.makeSpeedTemplateImage(
                 upLine: self.cachedUpLine, downLine: self.cachedDownLine)
-        }
-
-        let targetAlpha: CGFloat = display.isProcessing ? 0.4 : 1.0
-        if self.alphaValue != targetAlpha {
-            self.alphaValue = targetAlpha
         }
 
         if modeChanged || iconVisibilityChanged {

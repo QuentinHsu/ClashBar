@@ -91,7 +91,6 @@ extension AppSession {
         self.updateDataAcquisitionPolicy()
 
         guard presented else { return }
-        self.refreshLaunchAtLoginStatus()
         self.flushPendingTrafficSnapshotIfNeeded(immediately: true)
         self.scheduleRefreshForActivatedTab(activeMenuTab)
         Task { [weak self] in
@@ -103,10 +102,6 @@ extension AppSession {
         let changed = activeMenuTab != tab
         activeMenuTab = tab
         self.updateDataAcquisitionPolicy()
-
-        if tab == .system {
-            self.refreshLaunchAtLoginStatus()
-        }
 
         guard changed else { return }
         self.scheduleRefreshForActivatedTab(tab)
@@ -172,10 +167,6 @@ extension AppSession {
             if proxyProvidersDetail.isEmpty || ruleItems.isEmpty {
                 await refreshProvidersAndRules()
             }
-        case .nodes:
-            await self.refreshMediumFrequency()
-            guard shouldContinueRefresh() else { return }
-            await refreshProvidersAndRules()
         case .rules:
             await refreshProvidersAndRules()
         case .connections:
@@ -197,10 +188,10 @@ extension AppSession {
             let client = try self.clientOrThrow()
             let snapshot = try await self.makeFetchMediumFrequencySnapshotUseCase(
                 using: client,
-                includeProxyGroups: self.activeMenuTab == .proxy || self.activeMenuTab == .nodes)
+                includeProxyGroups: self.activeMenuTab == .proxy)
                 .execute()
 
-            self.version = AppSemanticVersion.normalizedDisplayVersion(from: snapshot.versionInfo.version)
+            self.version = snapshot.versionInfo.version
             self.applyRuntimeConfigSnapshot(snapshot.configSnapshot)
 
             if let proxyGroupsPayload = snapshot.proxyGroupsPayload {
@@ -255,21 +246,23 @@ extension AppSession {
 
     private func releasePanelCachedData() {
         connectionsStore.connectionsCount = 0
-        connectionsStore.clearConnectionsList()
+        connectionsStore.connections.removeAll(keepingCapacity: false)
 
         memory = MemorySnapshot(inuse: 0)
+
+        proxyGroups.removeAll(keepingCapacity: false)
+        groupLatencyLoading.removeAll(keepingCapacity: false)
+        groupLatencies.removeAll(keepingCapacity: false)
+        proxyHistoryLatestDelay.removeAll(keepingCapacity: false)
+        proxyNodeTypes.removeAll(keepingCapacity: false)
 
         providerProxyCount = 0
         providerRuleCount = 0
         rulesCount = 0
+        proxyProvidersDetail.removeAll(keepingCapacity: false)
         providerUpdating.removeAll(keepingCapacity: false)
-
-        let hadRulesData = !ruleProviders.isEmpty || !ruleItems.isEmpty
         ruleProviders.removeAll(keepingCapacity: false)
         ruleItems.removeAll(keepingCapacity: false)
-        if hadRulesData {
-            noteRulesPresentationChanged()
-        }
     }
 
     func appendTrafficHistory(up: Int64, down: Int64) {
@@ -309,8 +302,6 @@ extension AppSession {
             if !self.isRemoteTarget {
                 await self.refreshSystemProxyStatus()
             }
-        case .nodes:
-            await refreshProvidersAndRules()
         case .rules:
             await refreshProvidersAndRules()
         case .system:
@@ -339,10 +330,8 @@ extension AppSession {
             proxyProviders: proxyProviders,
             fallbackProxyProviders: self.proxyProvidersDetail)
         self.proxyGroups = presentation.groups
-        self.proxyGroupIndex = [:]
         self.proxyHistoryLatestDelay = presentation.history
         self.proxyNodeTypes = presentation.nodeTypes
-        self.proxyNodeIDs = presentation.nodeIDs
     }
 
     func normalizedHealthcheckURL(_ value: String?) -> String? {

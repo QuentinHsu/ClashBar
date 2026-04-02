@@ -82,33 +82,22 @@ struct TrafficSparklineView: View {
 
     private func linePath(for values: [Int64], context: SparklinePathContext) -> Path {
         var path = Path()
-        let points = self.sparklinePoints(for: values, context: context)
-        guard let first = points.first else { return path }
+        guard !values.isEmpty else { return path }
 
-        path.move(to: first)
-        guard points.count > 1 else { return path }
-
-        if points.count == 2 {
-            path.addLine(to: points[1])
-            return path
-        }
-
-        for index in 0..<(points.count - 1) {
-            let previous = points[max(index - 1, 0)]
-            let current = points[index]
-            let next = points[index + 1]
-            let following = points[min(index + 2, points.count - 1)]
-            let controlPoints = self.bezierControlPoints(
-                previous: previous,
-                current: current,
-                next: next,
-                following: following,
-                context: context)
-
-            path.addCurve(
-                to: next,
-                control1: controlPoints.control1,
-                control2: controlPoints.control2)
+        let count = values.count
+        for (index, value) in values.enumerated() {
+            let x = CGFloat(index) / CGFloat(max(count - 1, 1)) * context.width
+            let y = self.yPosition(
+                value,
+                axisY: context.axisY,
+                span: context.span,
+                maxY: context.maxY,
+                direction: context.direction)
+            if index == 0 {
+                path.move(to: CGPoint(x: x, y: y))
+            } else {
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
         }
         return path
     }
@@ -128,51 +117,6 @@ struct TrafficSparklineView: View {
         path.move(to: CGPoint(x: 0, y: axisY))
         path.addLine(to: CGPoint(x: width, y: axisY))
         return path
-    }
-
-    private func sparklinePoints(for values: [Int64], context: SparklinePathContext) -> [CGPoint] {
-        let count = values.count
-        return values.enumerated().map { index, value in
-            let x = CGFloat(index) / CGFloat(max(count - 1, 1)) * context.width
-            let y = self.yPosition(
-                value,
-                axisY: context.axisY,
-                span: context.span,
-                maxY: context.maxY,
-                direction: context.direction)
-            return CGPoint(x: x, y: y)
-        }
-    }
-
-    private func bezierControlPoints(
-        previous: CGPoint,
-        current: CGPoint,
-        next: CGPoint,
-        following: CGPoint,
-        context: SparklinePathContext) -> (control1: CGPoint, control2: CGPoint)
-    {
-        let smoothing: CGFloat = 0.2
-        let minY = context.direction == .up ? context.axisY - context.span : context.axisY
-        let maxY = context.direction == .up ? context.axisY : context.axisY + context.span
-
-        let control1 = CGPoint(
-            x: current.x + (next.x - previous.x) * smoothing,
-            y: self.clamp(
-                current.y + (next.y - previous.y) * smoothing,
-                min: minY,
-                max: maxY))
-        let control2 = CGPoint(
-            x: next.x - (following.x - current.x) * smoothing,
-            y: self.clamp(
-                next.y - (following.y - current.y) * smoothing,
-                min: minY,
-                max: maxY))
-
-        return (control1, control2)
-    }
-
-    private func clamp(_ value: CGFloat, min minValue: CGFloat, max maxValue: CGFloat) -> CGFloat {
-        Swift.min(maxValue, Swift.max(minValue, value))
     }
 
     private func yPosition(

@@ -21,13 +21,11 @@ private final class FloatingPanel: NSPanel {
 
 private struct StatusItemPopoverRootView: View {
     @ObservedObject var appSession: AppSession
-    @ObservedObject var appUpdater: AppUpdater
     @ObservedObject var popoverLayoutModel: PopoverLayoutModel
 
     var body: some View {
         MenuBarRootView()
             .environmentObject(self.appSession)
-            .environmentObject(self.appUpdater)
             .environmentObject(self.appSession.connectionsStore)
             .environmentObject(self.appSession.remoteMachineStore)
             .environmentObject(self.popoverLayoutModel)
@@ -37,7 +35,6 @@ private struct StatusItemPopoverRootView: View {
 @MainActor
 final class StatusItemController: NSObject {
     private let appSession: AppSession
-    private let appUpdater: AppUpdater
     private let viewModel: StatusBarViewModel
     private let statusItem: NSStatusItem
     private let panel: FloatingPanel
@@ -47,6 +44,7 @@ final class StatusItemController: NSObject {
     private let popoverScreenPadding: CGFloat = 10
     private let panelTopSpacing: CGFloat = 0
     private let panelHorizontalPadding: CGFloat = MenuBarLayoutTokens.space8
+
     private var changeCancellable: AnyCancellable?
     private var layoutCancellable: AnyCancellable?
     private var refreshWorkItem: DispatchWorkItem?
@@ -59,17 +57,14 @@ final class StatusItemController: NSObject {
     private var lockedPanelOriginX: CGFloat?
     private var popoverHostingController: NSHostingController<StatusItemPopoverRootView>?
     private var panelStabilizationTask: Task<Void, Never>?
-    private var pendingPopoverHeight: CGFloat?
-    private var popoverResizeScheduled = false
 
     private let iconOnlyRefreshInterval: TimeInterval = 0.12
     // Status-item snapshotting is expensive on macOS when traffic text changes frequently.
     private let speedDisplayRefreshInterval: TimeInterval = 1.0
     private static let popoverContentWidth: CGFloat = MenuBarLayoutTokens.panelWidth
 
-    init(appSession: AppSession, appUpdater: AppUpdater) {
+    init(appSession: AppSession) {
         self.appSession = appSession
-        self.appUpdater = appUpdater
         self.viewModel = StatusBarViewModel(session: appSession)
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.panel = FloatingPanel(
@@ -126,7 +121,6 @@ final class StatusItemController: NSObject {
         self.placePanelRelativeToStatusButton(button, preserveHorizontalPosition: false)
         NSApp.activate(ignoringOtherApps: true)
         self.panel.makeKeyAndOrderFront(nil)
-        self.panel.makeFirstResponder(nil)
         self.placePanelRelativeToStatusButton(button, preserveHorizontalPosition: true)
         self.suppressPanelScrollIndicators()
         self.schedulePanelStabilizationPasses(for: button)
@@ -161,7 +155,7 @@ final class StatusItemController: NSObject {
     private func ensurePopoverContent() {
         if self.popoverHostingController == nil {
             let hc = NSHostingController(rootView: self.popoverRootView)
-            hc.sizingOptions = []
+            hc.sizingOptions = [.standardBounds]
             self.popoverHostingController = hc
         } else {
             self.popoverHostingController?.rootView = self.popoverRootView
@@ -178,7 +172,6 @@ final class StatusItemController: NSObject {
     private var popoverRootView: StatusItemPopoverRootView {
         StatusItemPopoverRootView(
             appSession: self.appSession,
-            appUpdater: self.appUpdater,
             popoverLayoutModel: self.popoverLayoutModel)
     }
 
@@ -209,29 +202,8 @@ final class StatusItemController: NSObject {
         self.layoutCancellable = self.popoverLayoutModel.$resolvedPanelHeight
             .receive(on: RunLoop.main)
             .sink { [weak self] preferredHeight in
-                self?.schedulePopoverResize(to: preferredHeight)
+                self?.applyPopoverSize(preferredHeight: preferredHeight, preserveHorizontalPosition: true)
             }
-    }
-
-    private func schedulePopoverResize(to preferredHeight: CGFloat) {
-        self.pendingPopoverHeight = preferredHeight
-
-        guard !self.popoverResizeScheduled else { return }
-        self.popoverResizeScheduled = true
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.popoverResizeScheduled = false
-
-            guard let pendingPopoverHeight = self.pendingPopoverHeight else { return }
-            self.pendingPopoverHeight = nil
-
-            guard self.panel.contentViewController != nil else { return }
-
-            self.applyPopoverSize(
-                preferredHeight: pendingPopoverHeight,
-                preserveHorizontalPosition: true)
-        }
     }
 
     private func scheduleRefresh(display: MenuBarDisplay) {

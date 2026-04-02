@@ -57,7 +57,6 @@ enum Endpoint {
     case patchConfigs(body: [String: JSONValue])
 
     case groupDelay(name: String, url: String, timeout: Int)
-    case proxyDelay(name: String, url: String, timeout: Int)
 
     case proxies
     case switchProxy(name: String, target: String)
@@ -77,15 +76,13 @@ enum Endpoint {
     case closeConnection(id: String)
     case flushFakeIPCache
     case flushDNSCache
-    case restartCore
-    case updateGeoData
     case upgradeCore
 
     var method: HTTPMethod {
         switch self {
-        case .version, .traffic, .memory, .logs, .getConfigs, .groupDelay, .proxyDelay, .proxies,
-             .proxyProviders, .proxyProvider, .proxyProviderHealthcheck, .proxyProviderProxyHealthcheck,
-             .rules, .ruleProviders, .connections:
+        case .version, .traffic, .memory, .logs, .getConfigs, .groupDelay, .proxies, .proxyProviders,
+             .proxyProvider, .proxyProviderHealthcheck, .proxyProviderProxyHealthcheck, .rules,
+             .ruleProviders, .connections:
             .get
         case .putConfigs, .switchProxy, .updateProxyProvider, .updateRuleProvider:
             .put
@@ -93,7 +90,7 @@ enum Endpoint {
             .patch
         case .closeAllConnections, .closeConnection:
             .delete
-        case .flushFakeIPCache, .flushDNSCache, .restartCore, .updateGeoData, .upgradeCore:
+        case .flushFakeIPCache, .flushDNSCache, .upgradeCore:
             .post
         }
     }
@@ -106,7 +103,6 @@ enum Endpoint {
         case .logs: "/logs"
         case .getConfigs, .putConfigs, .patchConfigs: "/configs"
         case let .groupDelay(name, _, _): "/group/\(name.urlPathSegmentEscaped)/delay"
-        case let .proxyDelay(name, _, _): "/proxies/\(name.urlPathSegmentEscaped)/delay"
         case .proxies: "/proxies"
         case let .switchProxy(name, _): "/proxies/\(name.urlPathSegmentEscaped)"
         case .proxyProviders:
@@ -126,8 +122,6 @@ enum Endpoint {
         case let .closeConnection(id): "/connections/\(id.urlPathSegmentEscaped)"
         case .flushFakeIPCache: "/cache/fakeip/flush"
         case .flushDNSCache: "/cache/dns/flush"
-        case .restartCore: "/restart"
-        case .updateGeoData: "/configs/geo"
         case .upgradeCore: "/upgrade"
         }
     }
@@ -138,7 +132,7 @@ enum Endpoint {
             self.optionalQueryItem(name: "level", value: level)
         case let .putConfigs(force):
             force ? [URLQueryItem(name: "force", value: "true")] : []
-        case let .groupDelay(_, url, timeout), let .proxyDelay(_, url, timeout):
+        case let .groupDelay(_, url, timeout):
             self.healthcheckQueryItems(url: url, timeout: timeout)
         case let .proxyProviderHealthcheck(_, url, timeout), let .proxyProviderProxyHealthcheck(_, _, url, timeout):
             self.healthcheckQueryItems(url: url, timeout: timeout)
@@ -167,15 +161,10 @@ enum Endpoint {
         switch self {
         case .proxyProviderHealthcheck:
             180
-        case .updateProxyProvider, .updateRuleProvider:
-            15
         case let .groupDelay(_, _, timeout),
-             let .proxyDelay(_, _, timeout),
              let .proxyProviderProxyHealthcheck(_, _, _, timeout):
             max(5, TimeInterval(timeout) / 1000.0 + 2)
-        case .restartCore:
-            20
-        case .updateGeoData, .upgradeCore:
+        case .upgradeCore:
             60
         default:
             2
@@ -186,7 +175,7 @@ enum Endpoint {
     /// control-plane requests like reload/restart/toggle actions.
     var usesLongRunningSession: Bool {
         switch self {
-        case .groupDelay, .proxyDelay, .proxyProviderHealthcheck, .proxyProviderProxyHealthcheck:
+        case .groupDelay, .proxyProviderHealthcheck, .proxyProviderProxyHealthcheck:
             true
         default:
             false

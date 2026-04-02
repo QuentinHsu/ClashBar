@@ -62,10 +62,9 @@ struct RemoteMachineManagerView: View {
     @State private var hoveringLocalCard = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var appSession: AppSession
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: UserDefaults.standard.string(forKey: "catbar.ui.language") ?? "") ?? .zhHans
+        AppLanguage(rawValue: UserDefaults.standard.string(forKey: "clashbar.ui.language") ?? "") ?? .zhHans
     }
 
     private var panelWidth: CGFloat {
@@ -73,23 +72,23 @@ struct RemoteMachineManagerView: View {
     }
 
     private var panelHeight: CGFloat {
-        448
+        500
     }
 
     private var outerPadding: CGFloat {
-        12
+        16
     }
 
     private var cardPadding: CGFloat {
-        8
+        12
     }
 
     private var cardCornerRadius: CGFloat {
-        10
+        12
     }
 
     private var trailingActionAreaWidth: CGFloat {
-        54
+        66
     }
 
     private var isDarkAppearance: Bool {
@@ -97,12 +96,7 @@ struct RemoteMachineManagerView: View {
     }
 
     private var panelBackground: Color {
-        Color(nsColor: self.isDarkAppearance ? .windowBackgroundColor : .controlBackgroundColor)
-    }
-
-    private var panelBorderColor: Color {
-        Color(nsColor: .separatorColor)
-            .opacity(self.isDarkAppearance ? 0.26 : 0.12)
+        Color(nsColor: .windowBackgroundColor)
     }
 
     private var primaryTextColor: Color {
@@ -133,36 +127,21 @@ struct RemoteMachineManagerView: View {
     }
 
     private var cardFill: Color {
-        Color(nsColor: self.isDarkAppearance ? .controlBackgroundColor : .windowBackgroundColor)
-            .opacity(self.isDarkAppearance ? 0.72 : 0.86)
+        if self.isDarkAppearance {
+            return Color.white.opacity(0.05)
+        }
+        return Color.white.opacity(0.42)
     }
 
     private var cardHoverFill: Color {
-        self.nativeHoverTint.opacity(self.isDarkAppearance ? 0.20 : 0.14)
+        if self.isDarkAppearance {
+            return Color.white.opacity(0.10)
+        }
+        return Color.white.opacity(0.62)
     }
 
     private var cardSelectedFill: Color {
-        self.accentTint.opacity(self.isDarkAppearance ? 0.11 : 0.07)
-    }
-
-    private var cardSelectedBorder: Color {
-        self.accentTint.opacity(self.isDarkAppearance ? 0.42 : 0.22)
-    }
-
-    private var sectionFill: Color {
-        self.cardFill.opacity(self.isDarkAppearance ? 0.78 : 0.90)
-    }
-
-    private var sectionBorderColor: Color {
-        self.borderColor.opacity(self.isDarkAppearance ? 0.92 : 0.78)
-    }
-
-    private var rowSelectedFill: Color {
-        self.accentTint.opacity(self.isDarkAppearance ? 0.13 : 0.08)
-    }
-
-    private var nativeHoverTint: Color {
-        Color(nsColor: .selectedContentBackgroundColor)
+        self.accentTint.opacity(self.isDarkAppearance ? 0.14 : 0.10)
     }
 
     private var accentTint: Color {
@@ -191,43 +170,23 @@ struct RemoteMachineManagerView: View {
     }
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: MenuBarLayoutTokens.panelCornerRadius, style: .continuous)
-                .fill(self.panelBackground)
-                .overlay(alignment: .top) {
-                    LinearGradient(
-                        colors: [
-                            self.accentTint.opacity(self.isDarkAppearance ? 0.12 : 0.06),
-                            .clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing)
-                        .frame(height: 140)
-                        .clipShape(RoundedRectangle(cornerRadius: MenuBarLayoutTokens.panelCornerRadius, style: .continuous))
+        VStack(alignment: .leading, spacing: 0) {
+            self.headerBar
+            Group {
+                if let editorMode {
+                    self.editorContent(for: editorMode)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else {
+                    self.listContent
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-                .overlay {
-                    RoundedRectangle(cornerRadius: MenuBarLayoutTokens.panelCornerRadius, style: .continuous)
-                        .stroke(self.panelBorderColor, lineWidth: MenuBarLayoutTokens.stroke)
-                }
-
-            VStack(alignment: .leading, spacing: 0) {
-                self.headerBar
-                Group {
-                    if let editorMode {
-                        self.editorContent(for: editorMode)
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                    } else {
-                        self.listContent
-                            .transition(.move(edge: .leading).combined(with: .opacity))
-                    }
-                }
-                .padding(self.outerPadding)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .padding(self.outerPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(width: self.panelWidth, height: self.panelHeight, alignment: .topLeading)
+        .background(self.panelBackground)
         .clipShape(RoundedRectangle(cornerRadius: MenuBarLayoutTokens.panelCornerRadius, style: .continuous))
-        .shadow(color: Color.black.opacity(self.isDarkAppearance ? 0.22 : 0.12), radius: 20, x: 0, y: 10)
         .animation(.snappy(duration: 0.18), value: self.isEditing)
         .onAppear {
             self.store.startPeriodicConnectivityChecks()
@@ -240,8 +199,8 @@ struct RemoteMachineManagerView: View {
     private var headerBar: some View {
         HStack(spacing: 10) {
             HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(self.accentTint.opacity(self.isDarkAppearance ? 0.18 : 0.10))
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(self.accentTint.opacity(self.isDarkAppearance ? 0.22 : 0.14))
                     .frame(width: 28, height: 28)
                     .overlay {
                         Image(systemName: "network")
@@ -268,18 +227,13 @@ struct RemoteMachineManagerView: View {
                     .foregroundStyle(self.tertiaryTextColor)
                     .frame(width: 24, height: 24)
                     .background(
-                        self.cardFill,
+                        Color.black.opacity(self.isDarkAppearance ? 0.18 : 0.04),
                         in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(self.borderColor.opacity(0.9), lineWidth: MenuBarLayoutTokens.stroke)
-                    }
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, self.outerPadding)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
+        .padding(.vertical, 12)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(self.separatorColor)
@@ -288,8 +242,8 @@ struct RemoteMachineManagerView: View {
     }
 
     private var listContent: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            self.machineSection
+        VStack(alignment: .leading, spacing: 16) {
+            self.machineCards
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             self.primaryActionButton(title: self.tr("ui.machine.add"), systemImage: "plus") {
                 self.editorMode = .add
@@ -297,106 +251,111 @@ struct RemoteMachineManagerView: View {
         }
     }
 
-    private var machineSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(self.tr("ui.machine.sources"))
-                    .font(.app(size: 10, weight: .bold))
-                    .foregroundStyle(self.tertiaryTextColor)
-                    .textCase(.uppercase)
-
-                Spacer(minLength: 0)
-
-                Text("\(self.store.machines.count + 1)")
-                    .font(.app(size: 10, weight: .semibold))
-                    .foregroundStyle(self.secondaryTextColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(self.badgeBackgroundFill, in: Capsule())
-            }
-
-            ScrollView {
-                VStack(spacing: 0) {
-                    self.localCard
-                    Rectangle()
-                        .fill(self.separatorColor)
-                        .frame(height: MenuBarLayoutTokens.stroke)
-                        .padding(.leading, 36)
-
-                    ForEach(Array(self.store.machines.enumerated()), id: \.element.id) { index, machine in
-                        self.remoteCard(machine)
-                        if index < self.store.machines.count - 1 {
-                            Rectangle()
-                                .fill(self.separatorColor)
-                                .frame(height: MenuBarLayoutTokens.stroke)
-                                .padding(.leading, 36)
-                        }
-                    }
+    private var machineCards: some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                self.localCard
+                ForEach(self.store.machines) { machine in
+                    self.remoteCard(machine)
                 }
             }
-            .scrollIndicators(.hidden)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(self.sectionBackground)
+        .scrollIndicators(.hidden)
     }
 
     private var localCard: some View {
         let isActive = self.store.activeTarget.isLocal
         let hovered = self.hoveringLocalCard
 
-        return self.sourceCard(
-            title: self.tr("ui.machine.local"),
-            subtitle: self.localControllerDisplay,
-            iconSymbol: "desktopcomputer",
-            iconTint: self.localSourceTint,
-            isActive: isActive,
-            isSelectionEnabled: !isActive,
-            hovered: hovered,
-            onSelect: {
-                self.onSwitchTarget(.local)
-                self.dismiss()
-            },
-            badges: {
-                self.localStatusBadge
-            },
-            trailing: {
-                if isActive {
-                    self.activeIndicator
+        return Button {
+            guard !isActive else { return }
+            self.onSwitchTarget(.local)
+            self.dismiss()
+        } label: {
+            HStack(spacing: 14) {
+                self.iconTile(symbol: "desktopcomputer", tint: .blue)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(self.tr("ui.machine.local"))
+                        .font(.app(size: 14, weight: .semibold))
+                        .foregroundStyle(self.primaryTextColor)
+                    Text(self.localControllerDisplay)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(self.secondaryTextColor)
+                        .lineLimit(1)
                 }
-            })
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isActive ? Color.green : self.tertiaryTextColor)
+                    .opacity(isActive ? 1 : 0)
+            }
+            .padding(self.cardPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(self.cardBackground(selected: isActive, hovered: hovered))
+            .contentShape(RoundedRectangle(cornerRadius: self.cardCornerRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isActive)
         .onHover { self.hoveringLocalCard = $0 }
     }
 
     private func remoteCard(_ machine: RemoteMachine) -> some View {
         let status = self.store.statusFor(machine.id)
         let isActive = self.store.activeTargetID == machine.id
-        let isSwitchEnabled = !isActive
+        let isSwitchEnabled = status.isConnected && !isActive
         let hovered = self.hoveredMachineID == machine.id
 
-        return self.sourceCard(
-            title: machine.name,
-            subtitle: machine.displayAddress,
-            iconSymbol: "network",
-            iconTint: self.statusTint(status, active: isActive),
-            isActive: isActive,
-            isSelectionEnabled: isSwitchEnabled,
-            hovered: hovered,
-            onSelect: {
+        return HStack(spacing: 10) {
+            Button {
+                guard isSwitchEnabled else { return }
                 self.onSwitchTarget(.remote(machine))
                 self.dismiss()
-            },
-            badges: {
-                self.sourceStatusBadge(status)
-            },
-            trailing: {
-                self.remoteCardTrailing(
+            } label: {
+                HStack(spacing: 14) {
+                    self.iconTile(symbol: "network", tint: self.statusTint(status, active: isActive))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(machine.name)
+                            .font(.app(size: 14, weight: .semibold))
+                            .foregroundStyle(self.primaryTextColor)
+                            .lineLimit(1)
+
+                        HStack(spacing: 6) {
+                            self.statusDot(status)
+                            Text(machine.displayAddress)
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .foregroundStyle(self.secondaryTextColor)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(RoundedRectangle(cornerRadius: self.cardCornerRadius, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(!isSwitchEnabled)
+
+            if isActive {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .bold))
+                    .foregroundStyle(.green)
+                    .frame(width: self.trailingActionAreaWidth, alignment: .trailing)
+            } else {
+                self.inlineActionGroup(
                     machineID: machine.id,
-                    isActive: isActive,
                     emphasized: hovered,
                     editAction: { self.editorMode = .edit(machine) },
                     deleteAction: { self.store.removeMachine(id: machine.id) })
-            })
+                    .frame(width: self.trailingActionAreaWidth, alignment: .trailing)
+            }
+        }
+        .padding(self.cardPadding)
+        .background(self.cardBackground(selected: isActive, hovered: hovered))
         .onHover { isHovering in
             self.hoveredMachineID = isHovering ? machine.id : nil
             if !isHovering, self.hoveredRowAction?.machineID == machine.id {
@@ -411,74 +370,6 @@ struct RemoteMachineManagerView: View {
             Button(self.tr("ui.action.delete"), role: .destructive) {
                 self.store.removeMachine(id: machine.id)
             }
-        }
-    }
-
-    @ViewBuilder
-    private func sourceCard<Badges: View, Trailing: View>(
-        title: String,
-        subtitle: String?,
-        iconSymbol: String,
-        iconTint: Color,
-        isActive: Bool,
-        isSelectionEnabled: Bool,
-        hovered: Bool,
-        onSelect: @escaping () -> Void,
-        @ViewBuilder badges: () -> Badges,
-        @ViewBuilder trailing: () -> Trailing) -> some View
-    {
-        HStack(spacing: 8) {
-            Button {
-                guard isSelectionEnabled else { return }
-                onSelect()
-            } label: {
-                HStack(spacing: 8) {
-                    self.iconTile(symbol: iconSymbol, tint: iconTint)
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Text(title)
-                                .font(.app(size: 12, weight: .semibold))
-                                .foregroundStyle(self.primaryTextColor)
-                                .lineLimit(1)
-
-                            HStack(spacing: 4) {
-                                badges()
-                            }
-                        }
-
-                        if let subtitle, !subtitle.isEmpty {
-                            Text(subtitle)
-                                .font(.app(size: 10, weight: .regular))
-                                .foregroundStyle(self.secondaryTextColor)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: 34, alignment: .leading)
-                .contentShape(RoundedRectangle(cornerRadius: self.cardCornerRadius, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            trailing()
-                .frame(width: self.trailingActionAreaWidth, alignment: .trailing)
-        }
-        .padding(self.cardPadding)
-        .background(self.cardBackground(selected: isActive, hovered: hovered))
-    }
-
-    private var localSourceTint: Color {
-        switch self.appSession.localRuntimeVisualStatus {
-        case .runningHealthy:
-            .green
-        case .runningDegraded:
-            .green
-        case .starting, .failed, .stopped:
-            self.tertiaryTextColor
         }
     }
 
@@ -503,9 +394,9 @@ struct RemoteMachineManagerView: View {
     private func primaryActionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(.app(size: 13, weight: .medium))
+                .font(.app(size: 14, weight: .medium))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .padding(.vertical, 10)
                 .contentShape(RoundedRectangle(cornerRadius: self.cardCornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -521,134 +412,14 @@ struct RemoteMachineManagerView: View {
     }
 
     private func iconTile(symbol: String, tint: Color) -> some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(tint.opacity(self.isDarkAppearance ? 0.16 : 0.10))
-            .frame(width: 24, height: 24)
+            .frame(width: 44, height: 44)
             .overlay {
                 Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(tint)
             }
-    }
-
-    private var localStatusBadge: some View {
-        self.sourcePill(
-            title: self.localStatusTitle,
-            tint: self.localSourceTint,
-            fill: self.localSourceTint.opacity(self.isDarkAppearance ? 0.18 : 0.10),
-            showsProgress: self.isLocalRuntimeStarting)
-    }
-
-    private var isLocalRuntimeStarting: Bool {
-        if case .starting = self.appSession.localRuntimeVisualStatus {
-            return true
-        }
-        return false
-    }
-
-    private var localStatusTitle: String {
-        switch self.appSession.localRuntimeVisualStatus {
-        case .runningHealthy, .runningDegraded:
-            self.tr("ui.machine.status_connected")
-        case .starting:
-            self.tr("ui.machine.status_checking")
-        case .failed, .stopped:
-            self.tr("ui.machine.status_unreachable")
-        }
-    }
-
-    private var activeIndicator: some View {
-        Image(systemName: "checkmark.circle.fill")
-            .font(.app(size: 12, weight: .bold))
-            .foregroundStyle(self.accentTint)
-            .frame(width: 22, height: 22)
-            .background(self.accentTint.opacity(self.isDarkAppearance ? 0.18 : 0.10), in: Capsule())
-    }
-
-    @ViewBuilder
-    private func sourceStatusBadge(_ status: MachineConnectionStatus) -> some View {
-        switch status {
-        case .unknown:
-            self.sourcePill(
-                title: self.tr("ui.machine.status_unknown"),
-                tint: self.tertiaryTextColor,
-                fill: self.badgeBackgroundFill)
-        case .checking:
-            self.sourcePill(
-                title: self.tr("ui.machine.status_checking"),
-                tint: self.tertiaryTextColor,
-                fill: self.badgeBackgroundFill,
-                showsProgress: true)
-        case .connected:
-            self.sourcePill(
-                title: self.tr("ui.machine.status_connected"),
-                tint: Color(nsColor: .systemGreen),
-                fill: Color(nsColor: .systemGreen).opacity(self.isDarkAppearance ? 0.18 : 0.10))
-        case .failed:
-            self.sourcePill(
-                title: self.tr("ui.machine.status_unreachable"),
-                tint: self.tertiaryTextColor,
-                fill: self.badgeBackgroundFill)
-        }
-    }
-
-    private var badgeBackgroundFill: Color {
-        Color(nsColor: .quaternaryLabelColor).opacity(self.isDarkAppearance ? 0.24 : 0.12)
-    }
-
-    private var sectionBackground: some View {
-        RoundedRectangle(cornerRadius: self.cardCornerRadius, style: .continuous)
-            .fill(self.sectionFill)
-            .overlay {
-                RoundedRectangle(cornerRadius: self.cardCornerRadius, style: .continuous)
-                    .stroke(self.sectionBorderColor, lineWidth: MenuBarLayoutTokens.stroke)
-            }
-    }
-
-    private func sourcePill(title: String, tint: Color, fill: Color, showsProgress: Bool = false) -> some View {
-        HStack(spacing: 4) {
-            if showsProgress {
-                ProgressView()
-                    .controlSize(.mini)
-                    .scaleEffect(0.62)
-            }
-
-            Text(title)
-                .font(.app(size: 8, weight: .semibold))
-                .lineLimit(1)
-        }
-        .foregroundStyle(tint)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(fill, in: Capsule())
-    }
-
-    @ViewBuilder
-    private func remoteCardTrailing(
-        machineID: UUID,
-        isActive: Bool,
-        emphasized: Bool,
-        editAction: @escaping () -> Void,
-        deleteAction: @escaping () -> Void) -> some View
-    {
-        HStack(spacing: 6) {
-            if self.store.isRefreshing(machineID) {
-                ProgressView()
-                    .controlSize(.mini)
-                    .scaleEffect(0.72)
-                    .frame(width: 8, height: 8)
-            }
-
-            if isActive {
-                self.activeIndicator
-            } else {
-                self.inlineActionGroup(
-                    machineID: machineID,
-                    emphasized: emphasized,
-                    editAction: editAction,
-                    deleteAction: deleteAction)
-            }
-        }
     }
 
     private func inlineActionButton(
@@ -667,10 +438,10 @@ struct RemoteMachineManagerView: View {
 
         return Button(action: action) {
             Image(systemName: rowAction.symbol)
-                .font(.app(size: 9, weight: .semibold))
+                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(tint)
-                .frame(width: 18, height: 18)
+                .frame(width: 28, height: 28)
                 .background(shape.fill(fill))
                 .overlay {
                     shape.stroke(border, lineWidth: MenuBarLayoutTokens.stroke)
@@ -695,7 +466,7 @@ struct RemoteMachineManagerView: View {
         editAction: @escaping () -> Void,
         deleteAction: @escaping () -> Void) -> some View
     {
-        HStack(spacing: 3) {
+        HStack(spacing: 6) {
             self.inlineActionButton(machineID: machineID, rowAction: .edit, emphasized: emphasized, action: editAction)
             self.inlineActionButton(
                 machineID: machineID,
@@ -740,23 +511,37 @@ struct RemoteMachineManagerView: View {
 
     private func cardBackground(selected: Bool, hovered: Bool) -> some View {
         RoundedRectangle(cornerRadius: self.cardCornerRadius, style: .continuous)
-            .fill(selected ? self.rowSelectedFill : (hovered ? self.cardHoverFill : .clear))
+            .fill(selected ? self.cardSelectedFill : (hovered ? self.cardHoverFill : self.cardFill))
             .overlay {
-                if selected {
-                    RoundedRectangle(cornerRadius: self.cardCornerRadius, style: .continuous)
-                        .stroke(self.cardSelectedBorder, lineWidth: MenuBarLayoutTokens.stroke)
-                }
+                RoundedRectangle(cornerRadius: self.cardCornerRadius, style: .continuous)
+                    .stroke(self.borderColor, lineWidth: MenuBarLayoutTokens.stroke)
             }
+            .shadow(color: Color.black.opacity(self.isDarkAppearance ? 0.12 : 0.06), radius: 14, x: 0, y: 3)
     }
 
-    private func statusTint(_ status: MachineConnectionStatus, active _: Bool) -> Color {
+    private func statusDot(_ status: MachineConnectionStatus) -> some View {
+        Group {
+            if case .checking = status {
+                ProgressView()
+                    .controlSize(.mini)
+            } else {
+                Circle()
+                    .fill(self.statusTint(status, active: false))
+                    .frame(width: 6, height: 6)
+            }
+        }
+    }
+
+    private func statusTint(_ status: MachineConnectionStatus, active: Bool) -> Color {
         switch status {
-        case .unknown, .checking:
+        case .unknown:
             self.tertiaryTextColor
+        case .checking:
+            .orange
         case .connected:
-            Color(red: 0.10, green: 0.73, blue: 0.34)
+            active ? Color.green : Color(red: 0.10, green: 0.73, blue: 0.34)
         case .failed:
-            self.tertiaryTextColor
+            .red
         }
     }
 }
@@ -784,11 +569,10 @@ private struct RemoteMachineEditorCard: View {
     @State private var port: String = "9090"
     @State private var secret: String = ""
     @State private var useHTTPS = false
-    @State private var webPanelEnabled = false
     @FocusState private var focusedField: Field?
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: UserDefaults.standard.string(forKey: "catbar.ui.language") ?? "") ?? .zhHans
+        AppLanguage(rawValue: UserDefaults.standard.string(forKey: "clashbar.ui.language") ?? "") ?? .zhHans
     }
 
     private func tr(_ key: String) -> String {
@@ -843,8 +627,6 @@ private struct RemoteMachineEditorCard: View {
                 self.portProtocolRow
                 self.separator
                 self.secretRow
-                self.separator
-                self.webPanelRow
             }
             .background(self.formSurface)
 
@@ -864,7 +646,6 @@ private struct RemoteMachineEditorCard: View {
                 self.port = "\(machine.port)"
                 self.secret = machine.secret ?? ""
                 self.useHTTPS = machine.useHTTPS
-                self.webPanelEnabled = machine.webPanelEnabled ?? false
             } else {
                 self.focusedField = .name
             }
@@ -927,23 +708,6 @@ private struct RemoteMachineEditorCard: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.app(size: 13, weight: .regular))
                 .focused(self.$focusedField, equals: .secret)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
-
-    private var webPanelRow: some View {
-        HStack(spacing: 10) {
-            Text(self.tr("ui.machine.field.web_panel"))
-                .font(.app(size: 12, weight: .semibold))
-                .foregroundStyle(self.secondaryTextColor)
-                .frame(width: 56, alignment: .leading)
-            
-            Toggle("", isOn: self.$webPanelEnabled)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-            
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -1016,7 +780,6 @@ private struct RemoteMachineEditorCard: View {
             updated.port = portValue
             updated.secret = trimmedSecret.isEmpty ? nil : trimmedSecret
             updated.useHTTPS = self.useHTTPS
-            updated.webPanelEnabled = self.webPanelEnabled
             self.store.updateMachine(updated)
         } else {
             self.store.addMachine(
@@ -1025,8 +788,7 @@ private struct RemoteMachineEditorCard: View {
                     host: trimmedHost,
                     port: portValue,
                     secret: trimmedSecret.isEmpty ? nil : trimmedSecret,
-                    useHTTPS: self.useHTTPS,
-                    webPanelEnabled: self.webPanelEnabled))
+                    useHTTPS: self.useHTTPS))
         }
 
         self.onSave()

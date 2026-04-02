@@ -2,7 +2,6 @@ import SwiftUI
 
 enum RootTab: String, CaseIterable, Hashable {
     case proxy
-    case nodes
     case rules
     case connections
     case logs
@@ -11,7 +10,6 @@ enum RootTab: String, CaseIterable, Hashable {
     var titleKey: String {
         switch self {
         case .proxy: "ui.tab.proxy"
-        case .nodes: "ui.tab.nodes"
         case .rules: "ui.tab.rules"
         case .connections: "ui.tab.connections"
         case .logs: "ui.tab.logs"
@@ -22,7 +20,6 @@ enum RootTab: String, CaseIterable, Hashable {
     var symbolName: String {
         switch self {
         case .proxy: "square.grid.2x2.fill"
-        case .nodes: "server.rack"
         case .rules: "arrow.left.arrow.right"
         case .connections: "link"
         case .logs: "doc.fill"
@@ -45,11 +42,23 @@ enum LogLevelFilter: Hashable, CaseIterable {
     }
 }
 
+private struct ConnectionsRefreshToken: Equatable {
+    let connections: [ConnectionSummary]
+    let keyword: String
+    let transport: ConnectionsTransportFilter
+    let sort: ConnectionsSortOption
+}
+
 private struct LogsRefreshToken: Equatable {
     let logs: [AppErrorLogEntry]
     let sources: Set<AppLogSource>
     let levels: Set<LogLevelFilter>
     let keyword: String
+}
+
+private struct RulesRefreshToken: Equatable {
+    let items: [RuleItem]
+    let providers: [String: ProviderDetail]
 }
 
 struct MenuBarRootView: View {
@@ -59,7 +68,6 @@ struct MenuBarRootView: View {
     }
 
     @EnvironmentObject var appSession: AppSession
-    @EnvironmentObject var appUpdater: AppUpdater
     @EnvironmentObject var connectionsStore: ConnectionsStore
     @EnvironmentObject var remoteMachineStore: RemoteMachineStore
     @EnvironmentObject var popoverLayoutModel: PopoverLayoutModel
@@ -69,7 +77,6 @@ struct MenuBarRootView: View {
     @StateObject var connectionsViewModel = ConnectionsTabViewModel()
     @StateObject var logsViewModel = LogsTabViewModel()
     @StateObject var rulesViewModel = RulesTabViewModel()
-    @StateObject var nodesViewModel = NodesTabViewModel()
     @Namespace var segmentedSelectionNamespace
 
     @State var switchingMode: CoreMode?
@@ -77,18 +84,16 @@ struct MenuBarRootView: View {
     @State var showRemoteMachineManager = false
     @State var copiedProxyCommandTarget: ProxyCommandCopyTarget?
     @State var proxyCommandCopyResetTask: Task<Void, Never>?
-    @State var hoveredRuleID: String?
+    @State var hoveredProviderName: String?
+    @State var hoveredRuleIndex: Int?
     @State var hoveredMode: CoreMode?
     @State var hoveredTab: RootTab?
     @State var topHeaderHeight: CGFloat = 0
     @State var modeAndTabSectionHeight: CGFloat = 0
     @State var footerBarHeight: CGFloat = 0
-    @State var naturalPanelContentHeight: CGFloat = 0
-    @State var rulesHeaderHeight: CGFloat = 0
-    @State var connectionsHeaderHeight: CGFloat = 0
-    @State var logsHeaderHeight: CGFloat = 0
-    @AppStorage("catbar.proxy.group.hide_hidden") var hideHiddenProxyGroups: Bool = true
-    @AppStorage("catbar.proxy.group.sort_nodes_by_latency") var sortGroupNodesByLatency: Bool = false
+    @State var currentTabContentHeight: CGFloat = 0
+    @AppStorage("clashbar.proxy.group.hide_hidden") var hideHiddenProxyGroups: Bool = true
+    @AppStorage("clashbar.proxy.group.sort_nodes_by_latency") var sortGroupNodesByLatency: Bool = false
 
     var contentWidth: CGFloat {
         MenuBarLayoutTokens.panelWidth - (MenuBarLayoutTokens.space8 * 2)
@@ -117,12 +122,15 @@ struct MenuBarRootView: View {
     }
 
     var body: some View {
-        self.panelContent
-            .frame(width: MenuBarLayoutTokens.panelWidth, alignment: .topLeading)
-            .onDisappear {
-                self.proxyCommandCopyResetTask?.cancel()
-                self.proxyCommandCopyResetTask = nil
-            }
+        VStack(spacing: 0) {
+            self.panelContent
+            Spacer(minLength: 0)
+        }
+        .frame(width: MenuBarLayoutTokens.panelWidth, alignment: .topLeading)
+        .onDisappear {
+            self.proxyCommandCopyResetTask?.cancel()
+            self.proxyCommandCopyResetTask = nil
+        }
     }
 
     private var panelSections: some View {
@@ -135,11 +143,12 @@ struct MenuBarRootView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .reportHeight { updateSectionHeight($0, target: .modeAndTab) }
 
-            Group {
-                self.tabScrollAreaContent
+            ScrollView(.vertical) {
+                self.measuredTabContent(for: self.rootViewModel.currentTab)
             }
-
-            Spacer(minLength: 0)
+            .scrollIndicators(.hidden)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(height: tabScrollAreaHeight, alignment: .top)
 
             footerBar
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -151,140 +160,120 @@ struct MenuBarRootView: View {
         self.panelSections
             .frame(width: self.contentWidth, alignment: .topLeading)
             .padding(.horizontal, MenuBarLayoutTokens.space8)
-            .background(alignment: .topLeading) {
-                self.naturalPanelMeasurementLayer
-            }
-            .frame(width: MenuBarLayoutTokens.panelWidth, height: self.resolvedPanelHeight, alignment: .topLeading)
+            .frame(width: MenuBarLayoutTokens.panelWidth, height: resolvedPanelHeight, alignment: .topLeading)
             .background(self.panelBackground)
             .clipShape(RoundedRectangle(cornerRadius: MenuBarLayoutTokens.panelCornerRadius, style: .continuous))
     }
 
-    private var observedPanelContent: some View {
-        AnyView(self.styledPanelContent)
+    var panelContent: some View {
+        self.styledPanelContent
             .onAppear {
                 self.setCurrentTabWithoutAnimation(self.appSession.activeMenuTab)
                 self.appSession.setActiveMenuTab(self.rootViewModel.currentTab)
                 self.refreshDerivedData(for: self.rootViewModel.currentTab)
                 self.rootViewModel.updateFilteredProxyGroups(
                     from: self.appSession.proxyGroups,
-                    hideHiddenGroups: self.hideHiddenProxyGroups,
-                    currentMode: self.appSession.currentMode)
-                self.publishPreferredPanelHeight()
+                    hideHiddenGroups: self.hideHiddenProxyGroups)
+                publishPreferredPanelHeight()
             }
             .onChange(of: self.rootViewModel.currentTab) { tab in
-                if tab != .connections {
-                    self.connectionsViewModel.cancelPendingVisibleConnectionsCoalesce()
-                }
+                self.currentTabContentHeight = 0
                 self.appSession.setActiveMenuTab(tab)
                 self.refreshDerivedData(for: tab)
-                self.publishPreferredPanelHeight()
             }
             .onChange(of: self.appSession.activeMenuTab) { tab in
                 guard self.rootViewModel.currentTab != tab else { return }
                 self.setCurrentTabWithoutAnimation(tab)
-                if tab != .connections {
-                    self.connectionsViewModel.cancelPendingVisibleConnectionsCoalesce()
-                }
+                self.currentTabContentHeight = 0
                 self.refreshDerivedData(for: tab)
-                self.publishPreferredPanelHeight()
+            }
+            .onChange(of: resolvedPanelHeight) { _ in
+                publishPreferredPanelHeight()
             }
             .onChange(of: self.popoverLayoutModel.maxPanelHeight) { _ in
-                self.publishPreferredPanelHeight()
+                publishPreferredPanelHeight()
             }
-            .onChange(of: self.connectionsStore.connectionsRevision) { _ in
-                guard self.rootViewModel.currentTab == .connections else { return }
-                let searchText: (ConnectionSummary) -> String = { self.connectionSearchText(for: $0) }
-                self.connectionsViewModel.scheduleCoalescedVisibleConnectionsUpdate(
-                    connectionsSupplier: { self.connectionsStore.connections },
-                    searchText: searchText)
-            }
-            .onChange(of: self.connectionsViewModel.filterText) { _ in
-                self.refreshConnectionsDerivedDataIfVisible()
-            }
-            .onChange(of: self.connectionsViewModel.transportFilter) { _ in
-                self.refreshConnectionsDerivedDataIfVisible()
-            }
-            .onChange(of: self.connectionsViewModel.sortOption) { _ in
+            .onChange(of: ConnectionsRefreshToken(
+                connections: self.connectionsStore.connections,
+                keyword: self.connectionsViewModel.filterText,
+                transport: self.connectionsViewModel.transportFilter,
+                sort: self.connectionsViewModel.sortOption))
+            { _ in
                 self.refreshConnectionsDerivedDataIfVisible()
             }
             .onChange(of: LogsRefreshToken(
-                logs: self.appSession.errorLogs,
-                sources: self.logsViewModel.selectedSources,
-                levels: self.logsViewModel.selectedLevels,
-                keyword: self.logsViewModel.searchText))
+                    logs: self.appSession.errorLogs,
+                    sources: self.logsViewModel.selectedSources,
+                    levels: self.logsViewModel.selectedLevels,
+                    keyword: self.logsViewModel.searchText))
             { _ in
                 self.refreshLogsDerivedDataIfVisible()
-            }
-            .onChange(of: self.appSession.rulesPresentationRevision) { _ in
-                self.refreshRulesDerivedDataIfVisible()
-            }
-            .onChange(of: self.appSession.proxyGroups) { newGroups in
-                self.rootViewModel.updateFilteredProxyGroups(
-                    from: newGroups,
-                    hideHiddenGroups: self.hideHiddenProxyGroups,
-                    currentMode: self.appSession.currentMode)
-            }
-            .onChange(of: self.hideHiddenProxyGroups) { _ in
-                self.rootViewModel.updateFilteredProxyGroups(
-                    from: self.appSession.proxyGroups,
-                    hideHiddenGroups: self.hideHiddenProxyGroups,
-                    currentMode: self.appSession.currentMode)
-            }
-            .onChange(of: self.appSession.currentMode) { mode in
-                self.rootViewModel.updateFilteredProxyGroups(
-                    from: self.appSession.proxyGroups,
-                    hideHiddenGroups: self.hideHiddenProxyGroups,
-                    currentMode: mode)
-            }
-    }
-
-    var panelContent: AnyView {
-        AnyView(self.observedPanelContent)
+                }
+                .onChange(of: RulesRefreshToken(
+                        items: self.appSession.ruleItems,
+                        providers: self.appSession.ruleProviders))
+                { _ in
+                    self.refreshRulesDerivedDataIfVisible()
+                    }
+                    .onChange(of: self.appSession.proxyGroups) { newGroups in
+                            self.rootViewModel.updateFilteredProxyGroups(
+                                from: newGroups,
+                                hideHiddenGroups: self.hideHiddenProxyGroups)
+                        }
+                        .onChange(of: self.hideHiddenProxyGroups) { _ in
+                            self.rootViewModel.updateFilteredProxyGroups(
+                                from: self.appSession.proxyGroups,
+                                hideHiddenGroups: self.hideHiddenProxyGroups)
+                        }
     }
 
     @ViewBuilder
-    func tabBody(for tab: RootTab, isMeasuring: Bool = false) -> some View {
+    func tabBody(for tab: RootTab) -> some View {
         switch tab {
         case .proxy:
-            self.proxyTabBody(isMeasuring: isMeasuring)
-        case .nodes:
-            self.nodesTabBody(isMeasuring: isMeasuring)
+            proxyTabBody
         case .rules:
-            self.rulesTabBody(isMeasuring: isMeasuring)
+            rulesTabBody
         case .connections:
-            self.connectionsTabBody(isMeasuring: isMeasuring)
+            connectionsTabBody
         case .logs:
-            self.logsTabBody(isMeasuring: isMeasuring)
+            logsTabBody
         case .system:
-            self.systemTabBody // doesn't have large lists
+            systemTabBody
         }
     }
 
-    func tabContent(for tab: RootTab, isMeasuring: Bool = false) -> some View {
-        self.tabBody(for: tab, isMeasuring: isMeasuring)
+    func tabUsesDynamicHeight(_ tab: RootTab) -> Bool {
+        switch tab {
+        case .proxy, .system:
+            true
+        case .rules, .connections, .logs:
+            false
+        }
+    }
+
+    @ViewBuilder
+    func measuredTabContent(for tab: RootTab) -> some View {
+        let content = self.tabContent(for: tab)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+        if self.tabUsesDynamicHeight(tab) {
+            content.reportHeight { updateCurrentTabContentHeight($0, for: tab) }
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    func tabContent(for tab: RootTab) -> some View {
+        let content = self.tabBody(for: tab)
             .padding(.top, MenuBarLayoutTokens.space2)
-            .frame(width: self.contentWidth, alignment: .topLeading)
-            .id(tab)
-    }
 
-    private var naturalPanelMeasurementLayer: some View {
-        VStack(spacing: 0) {
-            topHeader
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            modeAndTabSection
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            self.tabContent(for: self.rootViewModel.currentTab, isMeasuring: true)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-
-            footerBar
-                .frame(maxWidth: .infinity, alignment: .leading)
+        if self.tabUsesDynamicHeight(tab) {
+            content.fixedSize(horizontal: false, vertical: true)
+        } else {
+            content
         }
-        .frame(width: self.contentWidth, alignment: .topLeading)
-        .reportHeight { self.updateNaturalPanelContentHeight($0) }
-        .hidden()
-        .allowsHitTesting(false)
     }
 
     var panelBackground: some View {
@@ -303,8 +292,6 @@ struct MenuBarRootView: View {
         switch tab {
         case .proxy:
             Task { await self.appSession.refreshSystemProxyHelperRuntimeSnapshot() }
-            return
-        case .nodes:
             return
         case .system:
             return

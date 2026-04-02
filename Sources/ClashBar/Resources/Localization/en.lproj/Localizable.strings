@@ -1,6 +1,5 @@
-"ui.tab.proxy" = "Proxy";
-"ui.tab.nodes" = "Node";
-"ui.tab.rules" = "Rules";
+"ui.tab.proxy" = "Node";
+"ui.tab.rules" = "Rule";
 "ui.tab.connections" = "Connection";
 "ui.tab.logs" = "Log";
 "ui.tab.system" = "Setting";
@@ -10,7 +9,7 @@
 "ui.log_filter.warning" = "Warning";
 "ui.log_filter.error" = "Error";
 "ui.log_source.all" = "All Sources";
-"ui.log_source.catbar" = "CatBar";
+"ui.log_source.clashbar" = "ClashBar";
 "ui.log_source.mihomo" = "Mihomo";
 
 "ui.header.status.running" = "Running";
@@ -26,7 +25,6 @@
 "ui.action.sort_nodes_by_latency" = "Sort Nodes by Latency";
 "ui.action.sort_nodes_default" = "Default Node Order";
 "ui.action.refresh" = "Refresh";
-"ui.action.update" = "Update";
 "ui.action.close_all" = "Close All";
 "ui.action.close_connection" = "Close Connection";
 "ui.action.copy_all_logs" = "Copy All Logs";
@@ -46,39 +44,36 @@
 "ui.action.open_web_ui" = "Open Web UI";
 "ui.action.enable_tun" = "Enable TUN Mode";
 "ui.action.disable_tun" = "Disable TUN Mode";
-"ui.action.update_geo" = "Update GEO";
-"ui.action.upgrade_core" = "Update Core";
+"ui.action.update_geo" = "Update GEO Data";
+"ui.action.upgrade_core" = "Upgrade Core";
 "ui.action.upgrade_ui" = "Upgrade UI";
-"ui.action.check_app_updates" = "Check for App Updates";
 "ui.action.upgrade_geo" = "Upgrade GEO Assets";
-"ui.action.restart_core_api" = "Restart Core";
+"ui.action.restart_core_api" = "Restart Core via API";
 
 "ui.mode.rule" = "Rule";
 "ui.mode.global" = "Global";
 "ui.mode.direct" = "Direct";
 
 "ui.machine.local" = "Local";
-"ui.machine.sources" = "Sources";
-"ui.machine.manage" = "Manage Sources";
-"ui.machine.add" = "Add Source";
-"ui.machine.edit" = "Edit Source";
+"ui.machine.manage" = "Manage Remote Machines";
+"ui.machine.add" = "Add Machine";
+"ui.machine.edit" = "Edit Machine";
 "ui.machine.save" = "Save";
-"ui.machine.empty" = "No remote sources";
+"ui.machine.empty" = "No remote machines";
 "ui.machine.field.name" = "Name";
 "ui.machine.field.host" = "Host";
 "ui.machine.field.port" = "Port";
 "ui.machine.field.secret" = "Secret";
-"ui.machine.field.web_panel" = "Web Panel";
+"ui.machine.remote_readonly" = "(Remote, read-only)";
 "ui.machine.return_local" = "Return to Local Core";
 "ui.machine.active" = "Active";
-"ui.machine.type.local" = "Local Source";
-"ui.machine.type.remote" = "Remote Source";
-"ui.machine.status_unknown" = "Unknown";
-"ui.machine.status_checking" = "Checking";
-"ui.machine.status_connected" = "Running";
-"ui.machine.status_unreachable" = "Not Running";
+"ui.machine.local_label" = "Local";
+"ui.machine.remote_label" = "Remote";
+"ui.machine.status_unreachable" = "Unreachable";
 
+"ui.section.local_app_settings" = "App Settings (Local)";
 "ui.section.core_settings" = "Core Settings";
+"ui.section.core_settings_remote" = "Core Settings (Remote)";
 
 "ui.quick.switch_config" = "Switch Config";
 "ui.quick.system_proxy" = "System Proxy";
@@ -94,28 +89,21 @@
 "ui.quick.remote.url_placeholder" = "https://example.com/config.yaml";
 "ui.quick.remote.filename_label" = "File Name";
 "ui.quick.remote.filename_placeholder" = "Leave empty to infer automatically";
+"ui.quick.remote.refreshing" = "Refreshing";
+"ui.quick.remote.refresh_failed" = "Refresh Failed";
+"ui.system_proxy.remote_target_warning" = "System proxy currently points to a remote core. Make sure the remote endpoint remains reachable.";
 
 "ui.section.proxy_providers" = "Proxy Providers";
 "ui.section.proxy_groups" = "Proxy Groups";
 "ui.section.basic_settings" = "Basic Settings";
-"ui.section.network_mode" = "Network Mode";
 "ui.section.proxy_ports" = "Proxy Ports";
-"ui.section.other_actions" = "Other Actions";
-"ui.section.maintenance" = "Core Actions";
-"ui.section.core_installation" = "Core Installation";
+"ui.section.maintenance" = "Maintenance";
 
 "ui.rules.column.target_type" = "Target / Type";
 "ui.rules.column.policy" = "Policy";
 "ui.rules.column.stats" = "Stats";
 "ui.rule.stats.rules" = "Rules";
 "ui.rule.stats.sets" = "Sets";
-
-"ui.nodes.section.providers" = "Remote Providers";
-"ui.nodes.section.local" = "Local Nodes";
-"ui.nodes.search_placeholder" = "Search nodes...";
-"ui.nodes.empty_local" = "No local nodes";
-"ui.nodes.no_match" = "No matching nodes";
-"ui.nodes.test_latency" = "Test Latency";
 
 "ui.empty.proxy_providers" = "No proxy providers";
 "ui.empty.proxy_groups" = "No proxy groups loaded";
@@ -152,10 +140,10 @@
 "ui.settings.allow_lan" = "Allow LAN";
 "ui.settings.ipv6" = "IPv6";
 "ui.settings.tcp_concurrent" = "TCP Concurrent";
-"ui.settings.tun_mode" = "Tun Mode";
+"ui.settings.tun_mode" = "TUN Mode";
 "ui.settings.log_level" = "Log Level";
 "ui.settings.port.port" = "HTTP Port";
-"ui.settings.port.socks" = "Socks Port";
+"ui.settings.port.socks" = "SOCKS Port";
 "ui.settings.port.mixed" = "Mixed Port";
 "ui.settings.port.redir" = "Redir Port";
 "ui.settings.port.tproxy" = "TProxy Port";
@@ -163,11 +151,6 @@
 "ui.settings.ports_hint" = "Click Save Ports after editing to apply changes to core config";
 "ui.settings.ports_auto_save_hint" = "Port changes are saved to core config automatically";
 "ui.settings.ports_auto_saving" = "Saving...";
-"ui.settings.core_status.detected" = "mihomo was detected. You can start the core now or manage the folder in Finder.";
-"ui.settings.core_status.missing" = "No mihomo core was detected. Copy an executable named \"mihomo\" into this folder, then restart the core.";
-"ui.settings.core_directory_path" = "Core Directory";
-"ui.action.open_core_directory.help" = "Open the current core directory in Finder";
-"ui.action.open_core_directory.help_missing" = "Open the core directory in Finder and copy an executable named \"mihomo\" into it";
 
 "ui.settings.display_mode.icon_and_speed" = "Icon + Speed";
 "ui.settings.display_mode.icon_only" = "Icon Only";
@@ -179,8 +162,6 @@
 "ui.footer.core_mihomo" = "MIHOMO %@";
 "ui.footer.version" = "v%@";
 "ui.footer.version_update_help" = "Open release notes for v%@";
-"ui.footer.version_install_help" = "Install v%@ with the built-in updater";
-"ui.footer.version_check_help" = "Check for CatBar updates";
 "ui.footer.version_update_accessibility" = "Current version v%@. Update available v%@.";
 "ui.footer.core_upgrade.running" = "Updating...";
 "ui.footer.core_upgrade.success" = "Updated";
@@ -222,19 +203,16 @@
 "app.settings.error.overlay_invalid_log_level" = "Settings overlay failed: invalid log-level %@";
 "app.settings.error.overlay_port_range" = "Settings overlay failed: %@ port must be in 0~65535";
 "app.settings.error.save_failed" = "%@ save failed: %@";
-"app.settings.error.open_core_directory_failed" = "Failed to open the core directory: %@";
-"app.settings.saved.core_directory_opened" = "Opened the core directory in Finder";
-"app.settings.saved.core_directory_opened_missing" = "Opened the core directory in Finder. Copy an executable named \"mihomo\" into it";
 "app.settings.overlay_success" = "Local settings preserved and applied over current config";
 "app.launch_at_login.error.unsupported_environment" = "Launch at login can only be enabled from the packaged .app build";
-"app.launch_at_login.error.requires_approval" = "Allow CatBar in System Settings > General > Login Items";
+"app.launch_at_login.error.requires_approval" = "Allow ClashBar in System Settings > General > Login Items";
 "app.launch_at_login.error.register_failed" = "Failed to enable launch at login: %@";
 "app.launch_at_login.error.unregister_failed" = "Failed to disable launch at login: %@";
 "app.system_proxy.error.invalid_host" = "Invalid proxy host";
 "app.system_proxy.error.invalid_port" = "Invalid proxy port";
 "app.system_proxy.error.helper_not_bundled" = "Privileged helper not found in app bundle. Use the packaged .app/.dmg build";
-"app.system_proxy.error.helper_install_location" = "Move CatBar.app to /Applications and reopen it before enabling system proxy";
-"app.system_proxy.error.helper_needs_approval" = "Allow CatBar background item in System Settings > General > Login Items, then try again";
+"app.system_proxy.error.helper_install_location" = "Move ClashBar.app to /Applications and reopen it before enabling system proxy";
+"app.system_proxy.error.helper_needs_approval" = "Allow ClashBar background item in System Settings > General > Login Items, then try again";
 "app.system_proxy.error.helper_not_registered" = "Privileged helper is not registered";
 "app.system_proxy.error.helper_not_registered_with_detail" = "Privileged helper is not registered: %@";
 "app.system_proxy.error.helper_start_timed_out" = "Privileged helper startup timed out";
@@ -249,7 +227,7 @@
 "app.system_proxy.alert.helper_start_timed_out" = "Helper startup timed out";
 "app.system_proxy.alert.helper_connection_failed" = "Helper connection failed";
 "app.system_proxy.alert.helper_operation_failed" = "System proxy operation failed";
-"app.system_proxy.alert.helper_install_location" = "Move CatBar to /Applications first";
+"app.system_proxy.alert.helper_install_location" = "Move ClashBar to /Applications first";
 "app.system_proxy.alert.helper_not_bundled" = "Helper missing from app bundle";
 "app.system_proxy.alert.helper_invalid_signature" = "Helper signature mismatch";
 "app.system_proxy.alert.unknown" = "System proxy operation failed";
@@ -291,9 +269,9 @@
 "app.core.alert.start_failed.title" = "Core Start Failed";
 "app.core.alert.restart_failed.title" = "Core Restart Failed";
 "app.core.alert.process_terminated.title" = "Core Terminated Unexpectedly";
-"app.core.error.binary_not_found" = "No mihomo core was found. Copy an executable named \"mihomo\" to %@, then start CatBar Core again.";
+"app.core.error.binary_not_found" = "No mihomo core was found. Copy an executable named \"mihomo\" to %@, then start ClashBar Core again.";
 "app.core.setup_required.title" = "Install Mihomo Core";
-"app.core.setup_required.message" = "This build does not bundle mihomo. Before first use, copy an executable named \"mihomo\" into:\n%@\n\nCatBar will load the core from that folder.";
+"app.core.setup_required.message" = "This build does not bundle mihomo. Before first use, copy an executable named \"mihomo\" into:\n%@\n\nClashBar will load the core from that folder.";
 
 "log.process.terminated" = "mihomo terminated with code %d";
 "log.working_dir_init_failed" = "Failed to initialize working directory: %@";
@@ -356,7 +334,6 @@
 "log.stream.disconnected" = "%@ WS disconnected: %@";
 "log.system_proxy.read_failed" = "Read system proxy status failed: %@";
 "log.launch_at_login.toggle_failed" = "Launch-at-login toggle failed: %@";
-"log.app_update.framework_initialized_manual" = "App update framework initialized via manual trigger.";
 "log.action.success" = "%@: success";
 "log.action.failed" = "%@: %@";
 "log.connection.copy_host" = "Copied connection host: %@";
@@ -368,15 +345,12 @@
 
 "log.action_name.reload_config" = "Reload config";
 "log.action_name.switch_proxy" = "Switch proxy %@ -> %@";
-"log.action_name.update_rule_group_providers" = "Update rule group %@";
 "log.action_name.update_rule_provider" = "Update rule provider %@";
 "log.action_name.update_proxy_provider" = "Update proxy provider %@";
 "log.action_name.close_all_connections" = "Close all connections";
 "log.action_name.close_connection" = "Close connection %@";
 "log.action_name.flush_fakeip_cache" = "Flush FakeIP cache";
 "log.action_name.flush_dns_cache" = "Flush DNS cache";
-"log.action_name.restart_core_api" = "Restart Core";
-"log.action_name.update_geo" = "Update GEO";
 
 "fmt.common.unknown" = "--";
 "fmt.relative.minutes" = "%dm ago";

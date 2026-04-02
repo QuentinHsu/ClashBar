@@ -7,7 +7,6 @@ struct RemoteMachine: Identifiable, Codable, Equatable, Hashable {
     var port: Int
     var secret: String?
     var useHTTPS: Bool
-    var webPanelEnabled: Bool?
 
     var controllerAddress: String {
         if self.useHTTPS {
@@ -20,30 +19,13 @@ struct RemoteMachine: Identifiable, Codable, Equatable, Hashable {
         "\(self.host):\(self.port)"
     }
 
-    var webPanelURL: URL? {
-        guard self.webPanelEnabled == true else { return nil }
-        var components = URLComponents(string: self.controllerAddress.appending("/ui/"))
-        var queryItems = [
-            URLQueryItem(name: "host", value: self.host),
-            URLQueryItem(name: "hostname", value: self.host),
-            URLQueryItem(name: "port", value: "\(self.port)")
-        ]
-        if let secret = self.secret, !secret.isEmpty {
-            queryItems.append(URLQueryItem(name: "secret", value: secret))
-        }
-        components?.queryItems = queryItems
-        let urlString = components?.url?.absoluteString.appending("#/proxies") ?? ""
-        return URL(string: urlString)
-    }
-
     init(
         id: UUID = UUID(),
         name: String,
         host: String,
         port: Int = 9090,
         secret: String? = nil,
-        useHTTPS: Bool = false,
-        webPanelEnabled: Bool? = nil)
+        useHTTPS: Bool = false)
     {
         self.id = id
         self.name = name
@@ -51,7 +33,6 @@ struct RemoteMachine: Identifiable, Codable, Equatable, Hashable {
         self.port = port
         self.secret = secret
         self.useHTTPS = useHTTPS
-        self.webPanelEnabled = webPanelEnabled
     }
 }
 

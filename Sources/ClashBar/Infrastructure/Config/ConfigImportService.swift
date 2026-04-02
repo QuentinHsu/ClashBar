@@ -6,7 +6,7 @@ struct ConfigImportService {
     func writeConfigData(_ data: Data, to targetURL: URL) throws {
         guard !data.isEmpty else {
             throw NSError(
-                domain: "CatBar.ConfigImport",
+                domain: "ClashBar.ConfigImport",
                 code: 422,
                 userInfo: [NSLocalizedDescriptionKey: "Remote config response is empty"])
         }
@@ -92,7 +92,7 @@ struct ConfigImportService {
 
     private func remoteConfigTooLargeError(limit: Int) -> NSError {
         NSError(
-            domain: "CatBar.ConfigImport",
+            domain: "ClashBar.ConfigImport",
             code: 413,
             userInfo: [NSLocalizedDescriptionKey: "Remote config exceeds size limit (\(limit) bytes)"])
     }

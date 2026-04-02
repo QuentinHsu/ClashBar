@@ -2,52 +2,20 @@ import Foundation
 
 @MainActor
 extension AppSession {
-    func synchronizeRuntimeStatusForActiveTarget(remoteIsReachable: Bool? = nil) {
-        switch self.remoteMachineStore.activeTarget {
-        case .remote:
-            let isRunning = remoteIsReachable ?? (self.apiStatus == .healthy || self.apiStatus == .degraded)
-            self.statusText = isRunning ? "Running" : "Stopped"
-        case .local:
-            if !self.coreRepository.isRunning {
-                self.statusText = "Stopped"
-            }
-        }
-    }
-
-    func refreshRemoteTargetAvailabilityForMenuBarIfNeeded() async {
-        guard case let .remote(machine) = self.remoteMachineStore.activeTarget else {
-            self.synchronizeRuntimeStatusForActiveTarget()
-            return
-        }
-
-        let status = await self.remoteMachineStore.refreshConnectivity(for: machine)
-        switch status {
-        case let .connected(version):
-            self.version = AppSemanticVersion.normalizedDisplayVersion(from: version)
-            self.apiStatus = .healthy
-            self.synchronizeRuntimeStatusForActiveTarget(remoteIsReachable: true)
-            self.startPolling()
-        case .unknown, .checking, .failed:
-            self.apiStatus = .unknown
-            self.synchronizeRuntimeStatusForActiveTarget(remoteIsReachable: false)
-        }
-    }
-
     func switchToMachineTarget(_ target: MachineTarget) async {
+        if case let .remote(machine) = target {
+            let status = await self.remoteMachineStore.refreshConnectivity(for: machine)
+            guard status.isConnected else { return }
+        }
+
         self.remoteMachineStore.selectTarget(target)
 
         self.cancelPolling()
         self.resetTrafficPresentation()
         self.clearAllLogs()
         self.proxyGroups = []
-        self.proxyGroupIndex = [:]
-        self.clearMeasuredProxyDelays()
-        self.proxyNodeTypes = [:]
-        self.proxyNodeIDs = [:]
         self.ruleItems = []
-        self.ruleProviders = [:]
-        self.noteRulesPresentationChanged()
-        self.connectionsStore.clearConnectionsList()
+        self.connectionsStore.connections = []
         self.connectionsStore.connectionsCount = 0
 
         switch target {
@@ -67,12 +35,10 @@ extension AppSession {
 
             if let snapshot = self.loadPersistedEditableSettingsSnapshot() {
                 self.applyEditableSettingsSnapshotToUI(snapshot)
-                self.lastSyncedEditableSettings = snapshot
                 self.preserveLocalSettingsOnNextSync = true
                 self.pendingAppLaunchOverlaySettings = snapshot
-            } else {
-                self.lastSyncedEditableSettings = nil
             }
+            self.lastSyncedEditableSettings = nil
 
         case let .remote(machine):
             self.appendLog(
@@ -97,9 +63,18 @@ extension AppSession {
             await self.applyPendingAppLaunchSettingsOverlayIfNeeded(syncSystemProxyPort: false)
         }
 
-        // Remote targets have no local process, so statusText must be kept in
-        // sync with the active controller state for the status-bar icon.
-        self.synchronizeRuntimeStatusForActiveTarget()
+        // Sync statusText so isRuntimeRunning reflects the active target.
+        // Remote targets have no local process, so coreRepository.isRunning is
+        // always false; statusText is the only signal menuBarSpeedLines uses.
+        switch target {
+        case .remote:
+            self.statusText = (self.apiStatus == .healthy || self.apiStatus == .degraded)
+                ? "Running" : "Stopped"
+        case .local:
+            if !self.coreRepository.isRunning {
+                self.statusText = "Stopped"
+            }
+        }
 
         if self.apiStatus == .healthy || self.apiStatus == .degraded {
             self.startPolling()

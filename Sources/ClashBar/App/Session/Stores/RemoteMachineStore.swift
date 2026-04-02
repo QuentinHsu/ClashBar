@@ -29,23 +29,16 @@ enum MachineConnectionStatus: Equatable {
 
 @MainActor
 final class RemoteMachineStore: ObservableObject {
-    private struct ConnectivityRequest {
-        let token: UUID
-        let task: Task<MachineConnectionStatus, Never>
-    }
-
-    private static let storageKey = "catbar.remote.machines"
-    private static let activeTargetKey = "catbar.remote.active_target_id"
+    private static let storageKey = "clashbar.remote.machines"
+    private static let activeTargetKey = "clashbar.remote.active_target_id"
 
     private let defaults: UserDefaults
 
     @Published var machines: [RemoteMachine] = []
     @Published var activeTargetID: UUID?
     @Published var machineStatuses: [UUID: MachineConnectionStatus] = [:]
-    @Published private(set) var refreshingMachineIDs: Set<UUID> = []
 
     private var connectivityTimer: Task<Void, Never>?
-    private var connectivityRequests: [UUID: ConnectivityRequest] = [:]
 
     var activeTarget: MachineTarget {
         guard let id = self.activeTargetID,
@@ -64,21 +57,17 @@ final class RemoteMachineStore: ObservableObject {
 
     func addMachine(_ machine: RemoteMachine) {
         self.machines.append(machine)
-        self.machineStatuses[machine.id] = .unknown
         self.persist()
     }
 
     func updateMachine(_ machine: RemoteMachine) {
         guard let index = self.machines.firstIndex(where: { $0.id == machine.id }) else { return }
         self.machines[index] = machine
-        self.resetConnectivityState(for: machine.id)
         self.persist()
     }
 
     func removeMachine(id: UUID) {
-        self.cancelConnectivityRequest(for: id)
         self.machines.removeAll { $0.id == id }
-        self.machineStatuses.removeValue(forKey: id)
         if self.activeTargetID == id {
             self.activeTargetID = nil
             self.persistActiveTarget()
@@ -105,10 +94,6 @@ final class RemoteMachineStore: ObservableObject {
         self.machineStatuses[id] ?? .unknown
     }
 
-    func isRefreshing(_ id: UUID) -> Bool {
-        self.refreshingMachineIDs.contains(id)
-    }
-
     func checkAllConnectivity() {
         for machine in self.machines {
             self.checkConnectivity(for: machine)
@@ -124,30 +109,8 @@ final class RemoteMachineStore: ObservableObject {
 
     @discardableResult
     func refreshConnectivity(for machine: RemoteMachine) async -> MachineConnectionStatus {
-        if let existingRequest = self.connectivityRequests[machine.id] {
-            return await existingRequest.task.value
-        }
-
-        if self.shouldShowCheckingState(for: machine.id) {
-            self.machineStatuses[machine.id] = .checking
-        }
-
-        self.refreshingMachineIDs.insert(machine.id)
-
-        let token = UUID()
-        let task = Task<MachineConnectionStatus, Never> {
-            await Self.probe(machine: machine)
-        }
-        self.connectivityRequests[machine.id] = ConnectivityRequest(token: token, task: task)
-
-        let status = await task.value
-
-        guard self.connectivityRequests[machine.id]?.token == token else {
-            return status
-        }
-
-        self.connectivityRequests[machine.id] = nil
-        self.refreshingMachineIDs.remove(machine.id)
+        self.machineStatuses[machine.id] = .checking
+        let status = await Self.probe(machine: machine)
         self.machineStatuses[machine.id] = status
         return status
     }
@@ -167,25 +130,6 @@ final class RemoteMachineStore: ObservableObject {
     func stopPeriodicConnectivityChecks() {
         self.connectivityTimer?.cancel()
         self.connectivityTimer = nil
-    }
-
-    private func shouldShowCheckingState(for id: UUID) -> Bool {
-        guard let currentStatus = self.machineStatuses[id] else { return true }
-        if case .unknown = currentStatus {
-            return true
-        }
-        return false
-    }
-
-    private func resetConnectivityState(for id: UUID) {
-        self.cancelConnectivityRequest(for: id)
-        self.machineStatuses[id] = .unknown
-    }
-
-    private func cancelConnectivityRequest(for id: UUID) {
-        self.connectivityRequests[id]?.task.cancel()
-        self.connectivityRequests[id] = nil
-        self.refreshingMachineIDs.remove(id)
     }
 
     private func persist() {

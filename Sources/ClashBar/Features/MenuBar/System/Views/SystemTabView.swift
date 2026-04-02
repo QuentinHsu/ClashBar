@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 // swiftlint:disable:next type_name
@@ -53,36 +52,6 @@ extension MenuBarRootView {
             self.settingsRowLabel(symbol: symbol, title: title)
                 .layoutPriority(1)
             Spacer(minLength: 0)
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .disabled(isDisabled)
-        }
-        .menuRowPadding(vertical: T.space4)
-    }
-
-    func settingsSystemProxyToggleRow(
-        isOn: Binding<Bool>,
-        isDisabled: Bool = false) -> some View
-    {
-        HStack(spacing: T.space8) {
-            HStack(spacing: T.space6) {
-                self.settingsRowLabel(symbol: "network", title: self.systemProxyRowTitle)
-
-                if let detailText = self.systemProxyRowDetailText {
-                    Text(detailText)
-                        .font(.app(size: T.FontSize.caption, weight: .medium))
-                        .foregroundStyle(self.systemProxyRowDetailColor)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .minimumScaleFactor(T.minimumScale)
-                }
-            }
-            .layoutPriority(1)
-
-            Spacer(minLength: 0)
-
             Toggle("", isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
@@ -149,43 +118,29 @@ extension MenuBarRootView {
     }
 
     func settingsPortFieldRow(_ title: String, symbol: String, text: Binding<String>) -> some View {
-        let editableText = Binding(
-            get: { text.wrappedValue },
-            set: { newValue in
-                guard text.wrappedValue != newValue else { return }
-                text.wrappedValue = newValue
-                appSession.scheduleProxyPortsAutoSaveIfNeeded()
-            })
-
-        return HStack(spacing: T.space8) {
+        HStack(spacing: T.space8) {
             self.settingsRowLabel(symbol: symbol, title: title)
                 .layoutPriority(1)
 
             Spacer(minLength: 0)
 
-            TextField(tr("ui.placeholder.port"), text: editableText)
+            TextField(tr("ui.placeholder.port"), text: text)
                 .textFieldStyle(.roundedBorder)
                 .font(.app(size: T.FontSize.body, weight: .regular))
                 .foregroundStyle(nativePrimaryLabel)
                 .multilineTextAlignment(.trailing)
                 .frame(width: self.settingsPortFieldWidth, alignment: .trailing)
+                .onChange(of: text.wrappedValue) { _ in
+                    appSession.scheduleProxyPortsAutoSaveIfNeeded()
+                }
                 .onSubmit {
                     Task { await appSession.applyProxyPorts(autoSaved: true) }
                 }
         }
     }
 
-    func maintenanceActionButton(
-        _ title: String,
-        symbol: String? = nil,
-        isLoading: Bool = false,
-        isDisabled: Bool = false,
-        help: String? = nil,
-        action: @escaping () async -> Void) -> some View
-    {
-        let isEnabled = self.maintenanceActionEnabled && !isDisabled
-
-        return Button {
+    func maintenanceActionButton(_ title: String, symbol: String, action: @escaping () async -> Void) -> some View {
+        Button {
             Task { await action() }
         } label: {
             Label {
@@ -193,20 +148,14 @@ extension MenuBarRootView {
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
             } icon: {
-                if isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                } else if let symbol {
-                    Image(systemName: symbol)
-                }
+                Image(systemName: symbol)
             }
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .appBorderedButtonStyle()
         .controlSize(.small)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.62)
-        .help(help ?? title)
+        .disabled(!self.maintenanceActionEnabled)
+        .opacity(self.maintenanceActionEnabled ? 1 : 0.62)
     }
 
     func settingsFeedbackBanner(text: String, color: Color, symbol: String) -> some View {
@@ -221,51 +170,6 @@ extension MenuBarRootView {
                 .lineLimit(2)
 
             Spacer(minLength: 0)
-        }
-        .menuRowPadding(vertical: T.space4)
-        .background {
-            RoundedRectangle(cornerRadius: T.cornerRadius, style: .continuous)
-                .fill(nativeControlFill)
-                .overlay {
-                    RoundedRectangle(cornerRadius: T.cornerRadius, style: .continuous)
-                        .stroke(color.opacity(0.26), lineWidth: T.stroke)
-                }
-                .shadow(
-                    color: Color(nsColor: .shadowColor).opacity(T.Shadow.standard.opacity),
-                    radius: T.Shadow.standard.radius,
-                    x: T.Shadow.standard.x,
-                    y: T.Shadow.standard.y)
-        }
-    }
-
-    func settingsStatusCard(message: String, caption: String, path: String, color: Color, symbol: String) -> some View {
-        VStack(alignment: .leading, spacing: T.space4) {
-            HStack(spacing: T.space6) {
-                Image(systemName: symbol)
-                    .font(.app(size: T.FontSize.caption, weight: .semibold))
-                    .foregroundStyle(color)
-
-                Text(message)
-                    .font(.app(size: T.FontSize.caption, weight: .medium))
-                    .foregroundStyle(nativePrimaryLabel)
-                    .lineLimit(3)
-
-                Spacer(minLength: 0)
-            }
-
-            VStack(alignment: .leading, spacing: T.space2) {
-                Text(caption)
-                    .font(.app(size: T.FontSize.caption, weight: .semibold))
-                    .foregroundStyle(nativeTertiaryLabel)
-                    .textCase(.uppercase)
-
-                Text(path)
-                    .font(.app(size: T.FontSize.caption, weight: .regular))
-                    .foregroundStyle(nativeSecondaryLabel)
-                    .textSelection(.enabled)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
-            }
         }
         .menuRowPadding(vertical: T.space4)
         .background {
@@ -317,65 +221,17 @@ extension MenuBarRootView {
         SystemTabViewModel.maintenanceActionEnabled(session: appSession)
     }
 
-    var coreDirectoryStatusText: String {
-        self.appSession.hasDetectedCoreBinary
-            ? tr("ui.settings.core_status.detected")
-            : tr("ui.settings.core_status.missing")
-    }
-
-    var coreDirectoryStatusColor: Color {
-        self.appSession.hasDetectedCoreBinary
-            ? self.nativePositive.opacity(T.Opacity.solid)
-            : self.nativeWarning.opacity(T.Opacity.solid)
-    }
-
-    var coreDirectoryStatusSymbol: String {
-        self.appSession.hasDetectedCoreBinary ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
-    }
-
-    var openCoreDirectoryHelp: String {
-        self.appSession.hasDetectedCoreBinary
-            ? tr("ui.action.open_core_directory.help")
-            : tr("ui.action.open_core_directory.help_missing")
-    }
-
     var settingsFeedbackState: (message: String, color: Color, symbol: String)? {
-        if let feedback = SystemTabViewModel.feedbackState(session: appSession) {
-            let color: Color = switch feedback.kind {
-            case .error:
-                nativeCritical.opacity(T.Opacity.solid)
-            case .warning:
-                nativeWarning.opacity(T.Opacity.solid)
-            case .success:
-                nativePositive.opacity(T.Opacity.solid)
-            }
-            return (feedback.message, color, feedback.symbol)
+        guard let feedback = SystemTabViewModel.feedbackState(session: appSession) else { return nil }
+        let color: Color = switch feedback.kind {
+        case .error:
+            nativeCritical.opacity(T.Opacity.solid)
+        case .warning:
+            nativeWarning.opacity(T.Opacity.solid)
+        case .success:
+            nativePositive.opacity(T.Opacity.solid)
         }
-
-        switch self.appSession.coreUpgradeState {
-        case .idle:
-            return nil
-        case .running:
-            return (
-                self.footerCoreUpgradeButtonHelp,
-                self.nativeAccent.opacity(T.Opacity.solid),
-                "arrow.clockwise.circle")
-        case .succeeded:
-            return (
-                self.footerCoreUpgradeButtonHelp,
-                self.nativePositive.opacity(T.Opacity.solid),
-                "checkmark.circle.fill")
-        case .alreadyLatest:
-            return (
-                self.footerCoreUpgradeButtonHelp,
-                self.nativePositive.opacity(T.Opacity.solid),
-                "checkmark.circle")
-        case .failed:
-            return (
-                self.footerCoreUpgradeButtonHelp,
-                self.nativeCritical.opacity(T.Opacity.solid),
-                "exclamationmark.triangle.fill")
-        }
+        return (feedback.message, color, feedback.symbol)
     }
 
     func editableCoreSettingBinding(_ setting: AppSession.EditableCoreSetting) -> Binding<Bool> {
@@ -395,7 +251,7 @@ extension MenuBarRootView {
             ("ui.settings.port.redir", "arrowshape.turn.up.right", $appSession.settingsRedirPort),
             ("ui.settings.port.tproxy", "shield.lefthalf.filled", $appSession.settingsTProxyPort),
         ]
-        let basicToggleItems: [(id: String, title: String, symbol: String, isOn: Binding<Bool>)] = [
+        let localOnlyItems: [(id: String, title: String, symbol: String, isOn: Binding<Bool>)] = [
             (
                 "launch-at-login",
                 tr("ui.settings.launch_at_login"),
@@ -403,8 +259,6 @@ extension MenuBarRootView {
                 Binding(
                     get: { appSession.launchAtLoginEnabled },
                     set: { appSession.applyLaunchAtLogin($0) })),
-        ]
-        let localCoreBehaviorItems: [(id: String, title: String, symbol: String, isOn: Binding<Bool>)] = [
             (
                 "auto-start-core",
                 tr("ui.settings.auto_start_core"),
@@ -442,17 +296,18 @@ extension MenuBarRootView {
             ("ui.action.flush_dns_cache", "network.badge.shield.half.filled", { await appSession.flushDNSCache() }),
         ]
         let selectedLogLevel = appSession.stringValue(for: .logLevel)
-        let showsLocalOnlyItems = !isRemote
-
-        let localTargetDisplay = self.appSession.localProxyCommandTargetDisplay()
-        let managedTargetDisplay = self.appSession.managedEndpointProxyCommandTargetDisplay()
-        let showManagedTargetAction = localTargetDisplay != managedTargetDisplay
 
         return VStack(alignment: .leading, spacing: T.space6) {
             VStack(spacing: 0) {
                 self.settingsCardHeader(
-                    tr("ui.section.basic_settings"),
+                    isRemote ? tr("ui.section.local_app_settings") : tr("ui.section.basic_settings"),
                     symbol: "slider.horizontal.3")
+                ForEach(localOnlyItems, id: \.id) { item in
+                    self.settingsToggleRow(
+                        isRemote ? "\(item.title) (\(tr("ui.machine.local_label")))" : item.title,
+                        symbol: item.symbol,
+                        isOn: item.isOn)
+                }
                 self.settingsSelectionRow(.init(
                     title: tr("ui.settings.menu_bar_style"),
                     symbol: "menubar.rectangle",
@@ -477,50 +332,6 @@ extension MenuBarRootView {
                     optionTitle: self.appearanceModeLabel,
                     isSelected: { appSession.appearanceMode == $0 },
                     onSelect: appSession.setAppearanceMode))
-                ForEach(basicToggleItems, id: \.id) { item in
-                    self.settingsToggleRow(
-                        item.title,
-                        symbol: item.symbol,
-                        isOn: item.isOn)
-                }
-            }
-
-            if showsLocalOnlyItems {
-                VStack(spacing: 0) {
-                    self.settingsCardHeader(
-                        tr("ui.section.network_mode"),
-                        symbol: "network")
-                    self.settingsToggleRow(
-                        tr("ui.settings.tun_mode"),
-                        symbol: "shield.lefthalf.filled",
-                        isOn: Binding(
-                            get: { appSession.isTunEnabled },
-                            set: { value in
-                                Task { await appSession.toggleTunMode(value) }
-                            }),
-                        isDisabled: !appSession.isTunToggleEnabled)
-                    self.settingsSystemProxyToggleRow(
-                        isOn: Binding(
-                            get: { appSession.isSystemProxyEnabled },
-                            set: { value in
-                                Task { await appSession.toggleSystemProxy(value) }
-                            }),
-                        isDisabled: appSession.isProxySyncing)
-                }
-            }
-
-            VStack(spacing: 0) {
-                self.settingsCardHeader(
-                    tr("ui.section.core_settings"),
-                    symbol: "gearshape.2")
-                if showsLocalOnlyItems {
-                    ForEach(localCoreBehaviorItems, id: \.id) { item in
-                        self.settingsToggleRow(
-                            item.title,
-                            symbol: item.symbol,
-                            isOn: item.isOn)
-                    }
-                }
                 self.settingsSelectionRow(.init(
                     title: tr("ui.settings.log_level"),
                     symbol: "text.alignleft",
@@ -531,6 +342,12 @@ extension MenuBarRootView {
                     onSelect: { level in
                         Task { await appSession.applyEditableCoreSetting(.logLevel, to: level.rawValue) }
                     }))
+            }
+
+            VStack(spacing: 0) {
+                self.settingsCardHeader(
+                    isRemote ? tr("ui.section.core_settings_remote") : tr("ui.section.core_settings"),
+                    symbol: "gearshape.2")
                 ForEach(coreToggleItems, id: \.id) { item in
                     self.settingsToggleRow(
                         item.title,
@@ -538,11 +355,20 @@ extension MenuBarRootView {
                         isOn: item.isOn,
                         isDisabled: appSession.isCoreSettingSyncing)
                 }
-                ForEach(proxyPortFields, id: \.titleKey) { item in
-                    self.settingsPortFieldRow(
-                        tr(item.titleKey),
-                        symbol: item.symbol,
-                        text: item.text)
+            }
+
+            VStack(spacing: 0) {
+                self.settingsCardHeader(
+                    tr("ui.section.proxy_ports"),
+                    symbol: "point.3.connected.trianglepath.dotted")
+
+                VStack(alignment: .leading, spacing: T.space4) {
+                    ForEach(proxyPortFields, id: \.titleKey) { item in
+                        self.settingsPortFieldRow(
+                            tr(item.titleKey),
+                            symbol: item.symbol,
+                            text: item.text)
+                    }
                 }
                 .menuRowPadding(vertical: T.space4)
             }
@@ -554,117 +380,26 @@ extension MenuBarRootView {
 
                 VStack(alignment: .leading, spacing: T.space4) {
                     HStack(spacing: T.space6) {
-                        self.maintenanceActionButton(
-                            self.footerCoreUpgradeButtonTitle,
-                            symbol: self.footerCoreUpgradeButtonSymbolName,
-                            isLoading: self.appSession.isCoreUpgradeInFlight,
-                            isDisabled: !self.isFooterCoreUpgradeEnabled,
-                            help: self.footerCoreUpgradeButtonHelp)
-                        {
-                            await self.appSession.upgradeCore()
-                        }
-
-                        self.maintenanceActionButton(
-                            tr("ui.action.restart_core_api"),
-                            symbol: "arrow.clockwise")
-                        {
-                            await self.appSession.restartCoreViaAPI()
-                        }
-
-                        self.maintenanceActionButton(
-                            tr("ui.action.update_geo"),
-                            symbol: "globe.badge.chevron.backward")
-                        {
-                            await self.appSession.updateGeoData()
-                        }
-                    }
-
-                    HStack(spacing: T.space6) {
-                        self.maintenanceActionButton(
-                            tr("ui.action.check_app_updates"),
-                            symbol: "arrow.down.circle")
-                        {
-                            self.appUpdater.checkForUpdates()
-                        }
-
                         ForEach(maintenanceActions, id: \.titleKey) { item in
                             self.maintenanceActionButton(tr(item.titleKey), symbol: item.symbol) {
                                 await item.action()
                             }
                         }
                     }
-                }
-                .menuRowPadding(vertical: T.space4)
-            }
 
-            if showsLocalOnlyItems {
-                VStack(spacing: 0) {
-                    self.settingsCardHeader(
-                        tr("ui.section.core_installation"),
-                        symbol: "shippingbox")
-
-                    VStack(alignment: .leading, spacing: T.space6) {
-                        self.settingsStatusCard(
-                            message: self.coreDirectoryStatusText,
-                            caption: tr("ui.settings.core_directory_path"),
-                            path: self.appSession.coreDirectoryPath,
-                            color: self.coreDirectoryStatusColor,
-                            symbol: self.coreDirectoryStatusSymbol)
-
+                    HStack(spacing: T.space6) {
                         Button {
-                            appSession.showCoreDirectoryInFinder(announceResult: true)
+                            appSession.showCoreDirectoryInFinder()
                         } label: {
                             Label(tr("ui.action.open_core_directory"), systemImage: "folder")
                                 .frame(maxWidth: .infinity, alignment: .center)
                         }
                         .appBorderedButtonStyle()
                         .controlSize(.small)
-                        .help(self.openCoreDirectoryHelp)
-                    }
-                    .menuRowPadding(vertical: T.space4)
-                }
-            }
-
-            VStack(spacing: 0) {
-                self.settingsCardHeader(
-                    tr("ui.section.other_actions"),
-                    symbol: "ellipsis.circle")
-
-                VStack(alignment: .leading, spacing: T.space4) {
-                    HStack(spacing: T.space6) {
-                        if showsLocalOnlyItems {
-                            self.proxyCommandActionButton(
-                                title: self.appSession.localProxyCommandHostDisplay(),
-                                target: .local,
-                                helpTitle: tr("ui.quick.copy_terminal"),
-                                helpDetail: localTargetDisplay)
-                            {
-                                self.appSession.copyLocalProxyCommand()
-                            }
-                        }
-
-                        if showManagedTargetAction || !showsLocalOnlyItems {
-                            self.proxyCommandActionButton(
-                                title: self.appSession.managedEndpointProxyCommandHostDisplay(),
-                                target: .currentEndpoint,
-                                helpTitle: tr("ui.quick.copy_terminal_current_endpoint"),
-                                helpDetail: managedTargetDisplay)
-                            {
-                                self.appSession.copyManagedEndpointProxyCommand()
-                            }
-                        }
                     }
                 }
                 .menuRowPadding(vertical: T.space4)
             }
-        }
-        .onAppear {
-            guard !self.appSession.isRemoteTarget else { return }
-            self.appSession.refreshDetectedCoreStatus()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            guard !self.appSession.isRemoteTarget else { return }
-            self.appSession.refreshDetectedCoreStatus()
         }
         .overlay(alignment: .top) {
             if let feedback = settingsFeedbackState {

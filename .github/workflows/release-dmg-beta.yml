@@ -1,8 +1,5 @@
 name: Release Beta DMG
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 on:
   workflow_dispatch:
 
@@ -22,7 +19,7 @@ jobs:
       source_ref: ${{ steps.meta.outputs.source_ref }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -59,17 +56,27 @@ jobs:
       matrix:
         include:
           - target_arch: arm64
+            dmg_suffix: apple-silicon
+            artifact_name: dmg-arm64
+            bundle_mihomo_binary: '1'
+          - target_arch: arm64
             dmg_suffix: apple-silicon-no-core
             artifact_name: dmg-arm64-no-core
+            bundle_mihomo_binary: '0'
+          - target_arch: x86_64
+            dmg_suffix: intel
+            artifact_name: dmg-x86_64
+            bundle_mihomo_binary: '1'
           - target_arch: x86_64
             dmg_suffix: intel-no-core
             artifact_name: dmg-x86_64-no-core
+            bundle_mihomo_binary: '0'
     runs-on: macos-15
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare-beta.outputs.source_ref }}
 
@@ -94,8 +101,8 @@ jobs:
         run: |
           APP_VERSION="${{ needs.prepare-beta.outputs.version }}" \
           BUILD_NUMBER="${{ needs.prepare-beta.outputs.build_number }}" \
-          PREPARE_MIHOMO_BINARY="0" \
-          BUNDLE_MIHOMO_BINARY="0" \
+          PREPARE_MIHOMO_BINARY="${{ matrix.bundle_mihomo_binary }}" \
+          BUNDLE_MIHOMO_BINARY="${{ matrix.bundle_mihomo_binary }}" \
           TARGET_ARCH="${{ matrix.target_arch }}" \
           ./Scripts/build.sh app
 
@@ -107,12 +114,12 @@ jobs:
           ./Scripts/build.sh dmg
 
       - name: Upload dmg artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
-            dist/CatBar-${{ needs.prepare-beta.outputs.version }}-${{ matrix.dmg_suffix }}.dmg
-            dist/CatBar-${{ needs.prepare-beta.outputs.version }}-${{ matrix.dmg_suffix }}.dmg.sha256
+            dist/ClashBar-${{ needs.prepare-beta.outputs.version }}-${{ matrix.dmg_suffix }}.dmg
+            dist/ClashBar-${{ needs.prepare-beta.outputs.version }}-${{ matrix.dmg_suffix }}.dmg.sha256
           if-no-files-found: error
 
   release:
@@ -122,12 +129,12 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare-beta.outputs.source_ref }}
 
       - name: Download dmg artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           pattern: dmg-*
           merge-multiple: true
@@ -150,7 +157,7 @@ jobs:
         with:
           tag_name: ${{ needs.prepare-beta.outputs.tag }}
           target_commitish: ${{ needs.prepare-beta.outputs.source_ref }}
-          name: CatBar ${{ needs.prepare-beta.outputs.version }}
+          name: ClashBar ${{ needs.prepare-beta.outputs.version }}
           body_path: release.md
           prerelease: true
           fail_on_unmatched_files: true

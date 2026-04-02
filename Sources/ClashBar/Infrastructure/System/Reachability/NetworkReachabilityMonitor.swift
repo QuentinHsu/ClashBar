@@ -21,7 +21,7 @@ final class NetworkReachabilityMonitor {
     private let queue: DispatchQueue
     private var monitor: NWPathMonitor?
 
-    init(queue: DispatchQueue = DispatchQueue(label: "com.catbar.network-reachability", qos: .utility)) {
+    init(queue: DispatchQueue = DispatchQueue(label: "com.clashbar.network-reachability", qos: .utility)) {
         self.queue = queue
     }
 

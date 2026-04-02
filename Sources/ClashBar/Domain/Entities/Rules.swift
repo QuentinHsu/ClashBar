@@ -10,12 +10,6 @@ struct RulesSummary: Decodable, Equatable {
         case rules
     }
 
-    private struct RawRuleItem: Decodable {
-        let type: String?
-        let payload: String?
-        let proxy: String?
-    }
-
     init(rules: [RuleItem], totalCount: Int? = nil) {
         self.rules = rules
         self.totalCount = totalCount ?? rules.count
@@ -34,9 +28,9 @@ struct RulesSummary: Decodable, Equatable {
 
         var totalCount = 0
         while !rulesContainer.isAtEnd {
-            let raw = try rulesContainer.decode(RawRuleItem.self)
+            let rule = try rulesContainer.decode(RuleItem.self)
             if retained.count < Self.retainedRuleLimit {
-                retained.append(RuleItem(type: raw.type, payload: raw.payload, proxy: raw.proxy, index: totalCount))
+                retained.append(rule)
             }
             totalCount += 1
         }
@@ -46,25 +40,29 @@ struct RulesSummary: Decodable, Equatable {
     }
 }
 
-struct RuleItem: Equatable, Identifiable {
-    let rowID: String
+struct RuleItem: Decodable, Equatable, Identifiable {
+    let rowID: UUID
     let type: String?
     let payload: String?
     let proxy: String?
 
-    var id: String {
+    var id: UUID {
         self.rowID
     }
 
     static func == (lhs: RuleItem, rhs: RuleItem) -> Bool {
-        lhs.rowID == rhs.rowID
+        lhs.type == rhs.type && lhs.payload == rhs.payload && lhs.proxy == rhs.proxy
     }
 
-    /// Deterministic ID that includes the list position so duplicates stay unique.
-    init(type: String?, payload: String?, proxy: String?, index: Int) {
-        self.type = type
-        self.payload = payload
-        self.proxy = proxy
-        self.rowID = "\(index):\(type ?? ""):\(payload ?? ""):\(proxy ?? "")"
+    private enum CodingKeys: String, CodingKey {
+        case type, payload, proxy
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.rowID = UUID()
+        self.type = try container.decodeIfPresent(String.self, forKey: .type)
+        self.payload = try container.decodeIfPresent(String.self, forKey: .payload)
+        self.proxy = try container.decodeIfPresent(String.self, forKey: .proxy)
     }
 }

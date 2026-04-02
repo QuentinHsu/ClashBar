@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.catbar.helper</string>
+    <string>com.clashbar.helper</string>
     <key>MachServices</key>
     <dict>
-        <key>com.catbar.helper</key>
+        <key>com.clashbar.helper</key>
         <true/>
     </dict>
     <key>BundleProgram</key>
-    <string>Contents/Library/HelperTools/com.catbar.helper</string>
+    <string>Contents/Library/HelperTools/com.clashbar.helper</string>
 </dict>
 </plist>

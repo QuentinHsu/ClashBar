@@ -47,20 +47,13 @@ final class AppSession: ObservableObject {
     @Published var selectedConfigName: String = "-"
     @Published var configDirectoryPath: String = "-"
     @Published var availableConfigFileNames: [String] = []
+    @Published var remoteConfigMenuStates: [String: RemoteConfigMenuState] = [:]
 
     @Published var proxyGroups: [ProxyGroup] = []
     @Published var groupLatencyLoading: Set<String> = []
-    @Published var nodeLatencyLoading: Set<String> = []
-    @Published var groupLatencyPendingDelayKeys: [String: Set<String>] = [:]
-    var groupLoadingRefCount = RefCountedPresence<String>()
-    var pendingDelayKeyRefCount = NestedRefCountedPresence<String, String>()
-    var nodeLoadingRefCount = RefCountedPresence<String>()
-    var proxyGroupIndex: [String: ProxyGroup] = [:]
     @Published var groupLatencies: [String: [String: Int]] = [:]
-    @Published var liveProxyLatestDelay: [String: Int] = [:]
     @Published var proxyHistoryLatestDelay: [String: Int] = [:]
     @Published var proxyNodeTypes: [String: String] = [:]
-    @Published var proxyNodeIDs: [String: String] = [:]
 
     @Published var providerProxyCount: Int = 0
     @Published var providerRuleCount: Int = 0
@@ -75,19 +68,9 @@ final class AppSession: ObservableObject {
 
     private(set) var sortedProxyProviderNames: [String] = []
     @Published var providerUpdating: Set<String> = []
-    @Published var proxyProviderUpdatedAtOverrides: [String: String] = [:]
-    @Published var ruleProviderUpdating: Set<String> = []
-    @Published var ruleProviderUpdatedAtOverrides: [String: String] = [:]
     @Published var ruleProviders: [String: ProviderDetail] = [:]
     @Published var ruleItems: [RuleItem] = []
-    /// Bumps when rule list or rule-provider map is replaced (avoids heavy array equality in SwiftUI `onChange`).
-    @Published private(set) var rulesPresentationRevision: UInt64 = 0
-    @Published var isProxyProvidersRefreshing: Bool = false
     @Published var isRuleProvidersRefreshing: Bool = false
-
-    func noteRulesPresentationChanged() {
-        self.rulesPresentationRevision &+= 1
-    }
 
     @Published var isSystemProxyEnabled: Bool = false
     @Published var systemProxyEnableIntentInFlight: Bool = false
@@ -108,15 +91,12 @@ final class AppSession: ObservableObject {
 
     @Published var errorLogs: [AppErrorLogEntry] = []
     @Published var startupErrorMessage: String?
-    @Published var coreActionState: CoreActionState = .idle {
-        didSet { self.refreshMenuBarDisplaySnapshotIfNeeded() }
-    }
+    @Published var coreActionState: CoreActionState = .idle
     @Published var coreUpgradeState: CoreUpgradeState = .idle
     @Published var providerRefreshStatus: ProviderRefreshStatus = .idle
     @Published var uiLanguage: AppLanguage = .zhHans
     @Published var appearanceMode: AppAppearanceMode = .system
     @Published var isPanelPresented: Bool = false
-    @Published var isQuittingApp: Bool = false
     @Published var activeMenuTab: RootTab = .proxy
     @Published var launchAtLoginEnabled: Bool = false
     @Published var launchAtLoginErrorMessage: String?
@@ -125,8 +105,7 @@ final class AppSession: ObservableObject {
         mode: .iconOnly,
         symbolName: "bolt.slash.circle",
         speedLines: nil,
-        isRunning: false,
-        isProcessing: false)
+        isRunning: false)
 
     @Published var settingsAllowLan: Bool = false
     @Published var settingsIPv6: Bool = false
@@ -152,10 +131,6 @@ final class AppSession: ObservableObject {
     var suppressSettingsPersistence = false
 
     var runtimeVisualStatus: RuntimeVisualStatus {
-        if self.coreActionState == .starting || self.coreActionState == .restarting {
-            return .starting
-        }
-        
         let normalized = self.statusText.lowercased()
         if normalized == "starting" { return .starting }
         if normalized == "failed" { return .failed }
@@ -172,17 +147,6 @@ final class AppSession: ObservableObject {
             }
         }
         return .stopped
-    }
-
-    var localRuntimeVisualStatus: RuntimeVisualStatus {
-        switch self.coreActionState {
-        case .starting, .restarting:
-            return .starting
-        case .stopping:
-            return .stopped
-        case .idle:
-            return self.coreRepository.isRunning ? .runningHealthy : .stopped
-        }
     }
 
     var runtimeStatusText: String {
@@ -235,42 +199,60 @@ final class AppSession: ObservableObject {
     }
 
     var menuBarSpeedLines: MenuBarSpeedLines {
-        // Keep the status-bar speed display on the same live traffic snapshot used by the panel.
+        guard self.isRuntimeRunning else { return .zero }
+
         let up = self.compactMenuBarRate(max(0, self.traffic.up))
         let down = self.compactMenuBarRate(max(0, self.traffic.down))
-        return MenuBarSpeedLines(up: up, down: down)
+        return MenuBarSpeedLines(up: "\(up)↑", down: "\(down)↓")
     }
 
     private var computedMenuBarDisplay: MenuBarDisplay {
         let running = self.isRuntimeRunning
-        let processing = self.runtimeVisualStatus == .starting
         switch self.statusBarDisplayMode {
         case .iconOnly:
             return MenuBarDisplay(
                 mode: .iconOnly,
                 symbolName: self.menuBarSymbolName,
                 speedLines: nil,
-                isRunning: running,
-                isProcessing: processing)
+                isRunning: running)
         case .iconAndSpeed:
             return MenuBarDisplay(
                 mode: .iconAndSpeed,
                 symbolName: self.menuBarSymbolName,
                 speedLines: self.menuBarSpeedLines,
-                isRunning: running,
-                isProcessing: processing)
+                isRunning: running)
         case .speedOnly:
             return MenuBarDisplay(
                 mode: .speedOnly,
                 symbolName: nil,
                 speedLines: self.menuBarSpeedLines,
-                isRunning: running,
-                isProcessing: processing)
+                isRunning: running)
         }
     }
 
     func compactMenuBarRate(_ bytesPerSecond: Int64) -> String {
-        ValueFormatter.speedCompact(bytesPerSecond)
+        let normalizedBytes = max(0, bytesPerSecond)
+        if normalizedBytes == 0 {
+            return "0K"
+        }
+
+        var value = Double(normalizedBytes) / 1024
+        let units = ["K", "M", "G", "T"]
+        var unitIndex = 0
+
+        while value >= 1000, unitIndex < units.count - 1 {
+            value /= 1024
+            unitIndex += 1
+        }
+
+        let unit = units[unitIndex]
+        if value < 10 {
+            return String(format: "%.2f%@", value, unit)
+        } else if value < 100 {
+            return String(format: "%.1f%@", value, unit)
+        } else {
+            return String(format: "%.0f%@", min(value, 999), unit)
+        }
     }
 
     func refreshMenuBarDisplaySnapshotIfNeeded() {
@@ -288,7 +270,7 @@ final class AppSession: ObservableObject {
     }
 
     var isTunToggleEnabled: Bool {
-        !self.isCoreActionProcessing && !self.isTunSyncing
+        (self.isRemoteTarget || self.isRuntimeRunning) && !self.isCoreActionProcessing && !self.isTunSyncing
     }
 
     var autoStartCoreEnabled: Bool {
@@ -354,7 +336,6 @@ final class AppSession: ObservableObject {
     var configDirectoryMonitorTask: Task<Void, Never>?
     var trafficDecodeTask: Task<Void, Never>?
     var mihomoLogFlushTask: Task<Void, Never>?
-    var launchAtLoginApprovalMonitorTask: Task<Void, Never>?
     var providerRefreshGeneration: Int = 0
     var lastTrafficSampleAt: Date?
     var lastTrafficDecodeAt: Date = .distantPast
@@ -367,19 +348,19 @@ final class AppSession: ObservableObject {
     var isLatestAppReleaseCheckInFlight = false
 
     let defaults = UserDefaults.standard
-    @AppStorage("catbar.auto.start.core") private var autoStartCore: Bool = false
-    @AppStorage("catbar.auto.core.network.recovery") private var autoCoreControlOnNetworkChange: Bool = true
-    @AppStorage("catbar.statusbar.display.mode") private var statusBarDisplayModeRaw: String = StatusBarDisplayMode
+    @AppStorage("clashbar.auto.start.core") private var autoStartCore: Bool = false
+    @AppStorage("clashbar.auto.core.network.recovery") private var autoCoreControlOnNetworkChange: Bool = true
+    @AppStorage("clashbar.statusbar.display.mode") private var statusBarDisplayModeRaw: String = StatusBarDisplayMode
         .iconOnly.rawValue
-    @AppStorage("catbar.proxy.node.hide_unavailable") var hideUnavailableProxyNodes: Bool = false
-    let selectedConfigKey = "catbar.config.selected.filename"
-    let legacySelectedConfigKey = "catbar.config.selected"
-    let remoteConfigSourcesKey = "catbar.config.remote.sources.v1"
-    let lastSuccessfulConfigPathKey = "catbar.last.success.config.path"
-    let editableSettingsSnapshotKey = "catbar.settings.editable.snapshot.v1"
-    let systemProxyEnabledOnQuitKey = "catbar.system_proxy.enabled_on_quit"
-    let uiLanguageKey = "catbar.ui.language"
-    let appearanceModeKey = "catbar.ui.appearance.mode"
+    @AppStorage("clashbar.proxy.node.hide_unavailable") var hideUnavailableProxyNodes: Bool = false
+    let selectedConfigKey = "clashbar.config.selected.filename"
+    let legacySelectedConfigKey = "clashbar.config.selected"
+    let remoteConfigSourcesKey = "clashbar.config.remote.sources.v1"
+    let lastSuccessfulConfigPathKey = "clashbar.last.success.config.path"
+    let editableSettingsSnapshotKey = "clashbar.settings.editable.snapshot.v1"
+    let systemProxyEnabledOnQuitKey = "clashbar.system_proxy.enabled_on_quit"
+    let uiLanguageKey = "clashbar.ui.language"
+    let appearanceModeKey = "clashbar.ui.appearance.mode"
     let maxLogEntries = 200
     let hiddenPanelMaxInMemoryLogEntries = 20
     let maxBufferedMihomoLogEntries = 40
@@ -397,14 +378,13 @@ final class AppSession: ObservableObject {
     // DRY: shared defaults for latency/provider healthcheck endpoints.
     let defaultHealthcheckURL = "https://www.gstatic.com/generate_204"
     let defaultHealthcheckTimeoutMilliseconds = 5000
-    let maxConcurrentLatencyMeasurements = 8
     var mediumFrequencyIntervalNanoseconds: UInt64 = 4_000_000_000
     var lowFrequencyIntervalNanoseconds: UInt64 = 20_000_000_000
     var currentConnectionsStreamIntervalMilliseconds: Int?
     var currentLogsStreamLevel: String?
-    var catbarLogFileURL: URL?
+    var clashbarLogFileURL: URL?
     var mihomoLogFileURL: URL?
-    var catbarLogStore: AppLogStore?
+    var clashbarLogStore: AppLogStore?
     var mihomoLogStore: AppLogStore?
     var didAttemptAutoStart = false
     var didCheckSystemProxyConsistencyOnLaunch = false
@@ -419,10 +399,9 @@ final class AppSession: ObservableObject {
     var remoteConfigSources: [String: String] = [:]
     var externalControllerWarningKeys: Set<String> = []
     let streamJSONDecoder = JSONDecoder()
-    let initialNoCoreSetupGuideShownKey = "catbar.core.install.guide.shown.v1"
+    let initialNoCoreSetupGuideShownKey = "clashbar.core.install.guide.shown.v1"
     let bundlesMihomoCore: Bool
     var didPresentInitialNoCoreSetupGuide = false
-    var appUpdaterEventObserver: NSObjectProtocol?
 
     init(
         processManager: (any MihomoControlling)? = nil,
@@ -435,7 +414,7 @@ final class AppSession: ObservableObject {
         networkReachabilityMonitor: NetworkReachabilityMonitor = NetworkReachabilityMonitor(),
         clipboardRepository: any ClipboardRepository = PasteboardClipboardRepository(),
         remoteMachineStore: RemoteMachineStore = RemoteMachineStore(),
-        catbarLogStore: AppLogStore? = nil,
+        clashbarLogStore: AppLogStore? = nil,
         mihomoLogStore: AppLogStore? = nil,
         startBackgroundRefresh: Bool = true)
     {
@@ -448,7 +427,7 @@ final class AppSession: ObservableObject {
         self.networkReachabilityMonitor = networkReachabilityMonitor
         self.clipboardRepository = clipboardRepository
         self.remoteMachineStore = remoteMachineStore
-        self.catbarLogStore = catbarLogStore
+        self.clashbarLogStore = clashbarLogStore
         self.mihomoLogStore = mihomoLogStore
         let resolvedConfigManager = configManager ?? ConfigDirectoryManager(
             workingDirectoryManager: workingDirectoryManager)
@@ -461,7 +440,7 @@ final class AppSession: ObservableObject {
         applyAppAppearance()
         refreshLaunchAtLoginStatus()
 
-        self.refreshDetectedCoreStatus()
+        self.mihomoBinaryPath = self.coreRepository.detectedBinaryPath ?? "-"
         if let managedProcess = self.processManager as? MihomoProcessManager {
             managedProcess.onLog = { [weak self] line in
                 Task { @MainActor in
@@ -490,15 +469,15 @@ final class AppSession: ObservableObject {
         }
         do {
             try self.workingDirectoryManager.bootstrapDirectories()
-            catbarLogFileURL = self.workingDirectoryManager.logsDirectoryURL.appendingPathComponent(
-                "catbar.log",
+            clashbarLogFileURL = self.workingDirectoryManager.logsDirectoryURL.appendingPathComponent(
+                "clashbar.log",
                 isDirectory: false)
             mihomoLogFileURL = self.workingDirectoryManager.logsDirectoryURL.appendingPathComponent(
                 "mihomo.log",
                 isDirectory: false)
 
-            if let catbarLogFileURL, self.catbarLogStore == nil {
-                self.catbarLogStore = AppLogStore(logFileURL: catbarLogFileURL)
+            if let clashbarLogFileURL, self.clashbarLogStore == nil {
+                self.clashbarLogStore = AppLogStore(logFileURL: clashbarLogFileURL)
             }
             if let mihomoLogFileURL, self.mihomoLogStore == nil {
                 self.mihomoLogStore = AppLogStore(logFileURL: mihomoLogFileURL)
@@ -512,26 +491,28 @@ final class AppSession: ObservableObject {
         restoreLastSuccessfulConfigIfAvailable()
         self.remoteConfigSources = loadPersistedRemoteConfigSources()
         pruneRemoteConfigSourcesIfNeeded()
-        self.restorePersistedPresentationSource()
+        // Always start in local mode. Remote target is session-level only.
+        self.remoteMachineStore.resetActiveTarget()
+        self.controllerUIURL = makeControllerUIURL(self.controller)
+        if let persisted = loadPersistedEditableSettingsSnapshot() {
+            applyEditableSettingsSnapshotToUI(persisted)
+            self.preserveLocalSettingsOnNextSync = true
+            self.pendingAppLaunchOverlaySettings = persisted
+        }
 
         if startBackgroundRefresh {
             Task {
                 await refreshFromAPI(includeSlowCalls: true)
-                if !self.isRemoteTarget {
-                    await applyPendingAppLaunchSettingsOverlayIfNeeded()
-                    self.seedCoreFeatureRecoveryFromPersistedQuitState()
-                    if self.hasSystemProxyOpenIntent {
-                        await self.systemProxyRepository.warmUpHelperIfPossible()
-                        await self.refreshSystemProxyHelperStatus()
-                        await refreshSystemProxyStatus()
-                        await ensureSystemProxyConsistencyOnFirstLaunchIfNeeded()
-                    } else {
-                        self.resetSystemProxyObservedState()
-                        self.didCheckSystemProxyConsistencyOnLaunch = true
-                    }
+                await applyPendingAppLaunchSettingsOverlayIfNeeded()
+                self.seedCoreFeatureRecoveryFromPersistedQuitState()
+                if self.hasSystemProxyOpenIntent {
+                    await self.systemProxyRepository.warmUpHelperIfPossible()
+                    await self.refreshSystemProxyHelperStatus()
+                    await refreshSystemProxyStatus()
+                    await ensureSystemProxyConsistencyOnFirstLaunchIfNeeded()
                 } else {
                     self.resetSystemProxyObservedState()
-                    await self.refreshRemoteTargetAvailabilityForMenuBarIfNeeded()
+                    self.didCheckSystemProxyConsistencyOnLaunch = true
                 }
             }
 
@@ -546,7 +527,6 @@ final class AppSession: ObservableObject {
         }
 
         self.updateNetworkReachabilityMonitoringState()
-        self.observeAppUpdaterEvents()
         self.refreshMenuBarDisplaySnapshotIfNeeded()
     }
 
@@ -569,7 +549,7 @@ final class AppSession: ObservableObject {
     }
 
     private static func resolveBundledMihomoCoreFlag() -> Bool {
-        guard let value = Bundle.main.object(forInfoDictionaryKey: "CatBarBundlesMihomoCore") else {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "ClashBarBundlesMihomoCore") else {
             return true
         }
 
@@ -580,20 +560,5 @@ final class AppSession: ObservableObject {
             return NSString(string: string).boolValue
         }
         return true
-    }
-
-    private func observeAppUpdaterEvents() {
-        guard self.appUpdaterEventObserver == nil else { return }
-
-        self.appUpdaterEventObserver = NotificationCenter.default.addObserver(
-            forName: .appUpdaterDidInitializeManually,
-            object: nil,
-            queue: .main)
-        { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.appendLog(level: "info", message: self.tr("log.app_update.framework_initialized_manual"))
-            }
-        }
     }
 }

@@ -37,7 +37,7 @@ extension MenuBarRootView {
                 .frame(width: self.headerLogoSize, height: self.headerLogoSize)
 
                 VStack(alignment: .leading, spacing: MenuBarLayoutTokens.space2) {
-                    Text("CatBar")
+                    Text("ClashBar")
                         .font(.app(size: MenuBarLayoutTokens.FontSize.title, weight: .semibold))
                         .foregroundStyle(nativePrimaryLabel)
 
@@ -46,7 +46,6 @@ extension MenuBarRootView {
                         if appSession.isExternalControllerWildcardIPv4 {
                             self.headerControllerWarningIcon
                         }
-                        self.headerWebPanelIcon
                     }
                 }
             }
@@ -54,33 +53,31 @@ extension MenuBarRootView {
             Spacer(minLength: MenuBarLayoutTokens.space6)
 
             HStack(spacing: MenuBarLayoutTokens.space6) {
-                if !appSession.isRemoteTarget {
-                    self.compactTopIcon(
-                        "arrow.clockwise",
-                        label: appSession.primaryCoreActionLabel,
-                        toneOverride: nativeInfo)
-                    {
-                        await appSession.performPrimaryCoreAction()
-                    }
-                    .disabled(!appSession.isPrimaryCoreActionEnabled)
-                    .opacity(appSession.isPrimaryCoreActionEnabled ? 1 : 0.6)
-
-                    self.compactTopIcon(
-                        appSession.isRuntimeRunning ? "stop.circle" : "play.circle",
-                        label: appSession.isRuntimeRunning ? tr("ui.action.stop") : tr("app.primary.start"),
-                        toneOverride: appSession.isRuntimeRunning ? nativeWarning : nativePositive)
-                    {
-                        if appSession.isRuntimeRunning {
-                            await appSession.stopCore()
-                        } else {
-                            await appSession.startCore(trigger: .manual)
-                        }
-                    }
-                    .disabled(appSession.isCoreActionProcessing)
-                    .opacity(appSession.isCoreActionProcessing ? 0.6 : 1)
+                self.compactTopIcon(
+                    "arrow.clockwise",
+                    label: appSession.primaryCoreActionLabel,
+                    toneOverride: nativeInfo)
+                {
+                    await appSession.performPrimaryCoreAction()
                 }
+                .disabled(appSession.isRemoteTarget || !appSession.isPrimaryCoreActionEnabled)
+                .opacity((appSession.isRemoteTarget || !appSession.isPrimaryCoreActionEnabled) ? 1 * 0.6 : 1)
 
-                self.compactTopIcon("power", label: tr("ui.action.quit"), warning: true, isLoading: appSession.isQuittingApp) {
+                self.compactTopIcon(
+                    appSession.isRuntimeRunning ? "stop.circle" : "play.circle",
+                    label: appSession.isRuntimeRunning ? tr("ui.action.stop") : tr("app.primary.start"),
+                    toneOverride: appSession.isRuntimeRunning ? nativeWarning : nativePositive)
+                {
+                    if appSession.isRuntimeRunning {
+                        await appSession.stopCore()
+                    } else {
+                        await appSession.startCore(trigger: .manual)
+                    }
+                }
+                .disabled(appSession.isRemoteTarget || appSession.isCoreActionProcessing)
+                .opacity((appSession.isRemoteTarget || appSession.isCoreActionProcessing) ? 0.6 : 1)
+
+                self.compactTopIcon("power", label: tr("ui.action.quit"), warning: true) {
                     await appSession.quitApp()
                 }
             }
@@ -131,14 +128,10 @@ extension MenuBarRootView {
                 .contentShape(Rectangle())
             },
             content: { dismiss in
-                self.headerPopoverSection(self.tr("ui.machine.sources"))
+                self.headerPopoverSection(self.tr("ui.machine.local_label"))
                 AttachedPopoverMenuItem(
-                    title: tr("ui.machine.local"),
-                    subtitle: nil,
-                    leadingSymbol: "desktopcomputer",
-                    leadingTint: self.localSourceTint,
-                    selected: remoteMachineStore.activeTarget.isLocal,
-                    selectionIndicatorPlacement: .trailing)
+                    title: tr("ui.machine.return_local"),
+                    selected: remoteMachineStore.activeTarget.isLocal)
                 {
                     dismiss()
                     guard !remoteMachineStore.activeTarget.isLocal else { return }
@@ -149,32 +142,33 @@ extension MenuBarRootView {
                     }
                 }
 
+                if !remoteMachineStore.machines.isEmpty {
+                    AttachedPopoverMenuDivider()
+                    self.headerPopoverSection(self.tr("ui.machine.manage"))
+                }
+
                 ForEach(remoteMachineStore.machines) { machine in
                     let status = remoteMachineStore.statusFor(machine.id)
-                    let isActive = remoteMachineStore.activeTargetID == machine.id
                     AttachedPopoverMenuItem(
                         title: machine.name,
-                        subtitle: nil,
-                        leadingSymbol: "network",
+                        leadingSymbol: nil,
                         leadingTint: self.machineStatusTint(status),
-                        selected: isActive,
-                        selectionIndicatorPlacement: .trailing)
+                        showLeadingDot: true,
+                        selected: remoteMachineStore.activeTargetID == machine.id)
                     {
                         dismiss()
-                        guard !isActive else { return }
+                        guard remoteMachineStore.activeTargetID != machine.id else { return }
                         isSwitchingMachine = true
                         Task { @MainActor in
                             await appSession.switchToMachineTarget(.remote(machine))
                             isSwitchingMachine = false
                         }
                     }
+                    .disabled(!status.isConnected)
                 }
 
                 AttachedPopoverMenuDivider()
-                AttachedPopoverMenuItem(
-                    title: tr("ui.machine.manage"),
-                    leadingSymbol: "slider.horizontal.3")
-                {
+                AttachedPopoverMenuItem(title: tr("ui.machine.manage")) {
                     dismiss()
                     showRemoteMachineManager = true
                 }
@@ -190,32 +184,6 @@ extension MenuBarRootView {
             .accessibilityLabel("Warning: external-controller is bound to 0.0.0.0")
     }
 
-    @ViewBuilder
-    var headerWebPanelIcon: some View {
-        if case let .remote(machine) = remoteMachineStore.activeTarget,
-           let webPanelURL = machine.webPanelURL
-        {
-            Button {
-                #if os(macOS)
-                NSWorkspace.shared.open(webPanelURL)
-                #endif
-            } label: {
-                Image(systemName: "safari")
-                    .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
-                    .foregroundStyle(nativeTertiaryLabel)
-            }
-            .buttonStyle(.plain)
-            .onHover { isHovered in
-                if isHovered {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-            .help(tr("ui.action.open_web_ui"))
-        }
-    }
-
     func headerPopoverSection(_ title: String) -> some View {
         Text(title)
             .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .bold))
@@ -228,30 +196,14 @@ extension MenuBarRootView {
     }
 
     var headerConnectionDisplayText: String {
-        switch remoteMachineStore.activeTarget {
-        case .local:
-            tr("ui.machine.local")
-        case let .remote(machine):
-            machine.name
-        }
+        appSession.externalControllerDisplay
     }
 
     var headerConnectionStatusTint: Color {
         if let status = self.machineSwitcherStatus {
             return self.machineStatusTint(status)
         }
-        return self.localSourceTint
-    }
-
-    var localSourceTint: Color {
-        switch self.appSession.localRuntimeVisualStatus {
-        case .runningHealthy:
-            nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid)
-        case .runningDegraded:
-            nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid)
-        case .starting, .failed, .stopped:
-            nativeSecondaryLabel
-        }
+        return self.statusColor
     }
 
     func compactTopIcon(

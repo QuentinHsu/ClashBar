@@ -1,0 +1,44 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:CatBar}",
+      "name": "Debug ClashBar",
+      "target": "ClashBar",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug ClashBar"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:CatBar}",
+      "name": "Release ClashBar",
+      "target": "ClashBar",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release ClashBar"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:CatBar}",
+      "name": "Debug ClashBarProxyHelper",
+      "target": "ClashBarProxyHelper",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug ClashBarProxyHelper"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:CatBar}",
+      "name": "Release ClashBarProxyHelper",
+      "target": "ClashBarProxyHelper",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release ClashBarProxyHelper"
+    }
+  ]
+}

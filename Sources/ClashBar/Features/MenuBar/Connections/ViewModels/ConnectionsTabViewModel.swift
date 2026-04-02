@@ -80,38 +80,14 @@ final class ConnectionsTabViewModel: ObservableObject {
     @Published var hoveredConnectionID: String?
     @Published private(set) var visibleConnections: [ConnectionSummary] = []
 
-    private var visibleConnectionsCoalesceTask: Task<Void, Never>?
-
     init(presentConnectionsUseCase: PresentConnectionsUseCase = PresentConnectionsUseCase()) {
         self.presentConnectionsUseCase = presentConnectionsUseCase
-    }
-
-    func cancelPendingVisibleConnectionsCoalesce() {
-        self.visibleConnectionsCoalesceTask?.cancel()
-        self.visibleConnectionsCoalesceTask = nil
-    }
-
-    /// Coalesces rapid WebSocket snapshots so the connections tab does not re-filter/sort on every frame.
-    func scheduleCoalescedVisibleConnectionsUpdate(
-        connectionsSupplier: @escaping @MainActor () -> [ConnectionSummary],
-        searchText: @escaping (ConnectionSummary) -> String)
-    {
-        self.visibleConnectionsCoalesceTask?.cancel()
-        self.visibleConnectionsCoalesceTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            guard !Task.isCancelled else { return }
-            self.updateVisibleConnections(from: connectionsSupplier(), searchText: searchText)
-            self.visibleConnectionsCoalesceTask = nil
-        }
     }
 
     func updateVisibleConnections(
         from connections: [ConnectionSummary],
         searchText: (ConnectionSummary) -> String)
     {
-        self.visibleConnectionsCoalesceTask?.cancel()
-        self.visibleConnectionsCoalesceTask = nil
-
         let nextConnections = self.presentConnectionsUseCase.execute(
             connections: connections,
             filterText: self.filterText,

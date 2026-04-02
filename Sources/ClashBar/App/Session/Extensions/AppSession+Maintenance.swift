@@ -18,14 +18,6 @@ extension AppSession {
         try FlushDNSCacheUseCase(repository: self.maintenanceRepository())
     }
 
-    private func restartCoreAPIUseCase() throws -> RestartCoreAPIUseCase {
-        try RestartCoreAPIUseCase(repository: self.maintenanceRepository())
-    }
-
-    private func updateGeoDataUseCase() throws -> UpdateGeoDataUseCase {
-        try UpdateGeoDataUseCase(repository: self.maintenanceRepository())
-    }
-
     private func fetchVersionUseCase() throws -> FetchVersionUseCase {
         try FetchVersionUseCase(repository: self.maintenanceRepository())
     }
@@ -54,18 +46,6 @@ extension AppSession {
     func flushDNSCache() async {
         await runNoResponseAction(tr("log.action_name.flush_dns_cache")) {
             try await self.flushDNSCacheUseCase().execute()
-        }
-    }
-
-    func restartCoreViaAPI() async {
-        await runNoResponseAction(tr("log.action_name.restart_core_api")) {
-            try await self.restartCoreAPIUseCase().execute()
-        }
-    }
-
-    func updateGeoData() async {
-        await runNoResponseAction(tr("log.action_name.update_geo")) {
-            try await self.updateGeoDataUseCase().execute()
         }
     }
 
@@ -132,7 +112,7 @@ extension AppSession {
         do {
             let versionInfo = try await self.fetchVersionUseCase().execute()
             guard !Task.isCancelled else { return }
-            self.version = AppSemanticVersion.normalizedDisplayVersion(from: versionInfo.version)
+            self.version = versionInfo.version
         } catch {
             // Best effort only. The core may be restarting briefly after an upgrade request.
         }

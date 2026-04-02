@@ -93,9 +93,9 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
         self.fileManager = fileManager
         self.configValidationTimeout = configValidationTimeout
         self.lifecycleQueue = lifecycleQueue
-            ?? DispatchQueue(label: "com.catbar.mihomo-process.operations", qos: .userInitiated)
+            ?? DispatchQueue(label: "com.clashbar.mihomo-process.operations", qos: .userInitiated)
         self.validationQueue = validationQueue
-            ?? DispatchQueue(label: "com.catbar.mihomo-process.validation", qos: .userInitiated)
+            ?? DispatchQueue(label: "com.clashbar.mihomo-process.validation", qos: .userInitiated)
     }
 
     deinit {
@@ -200,7 +200,7 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
         }
         proc.currentDirectoryURL = workingDirectoryURL
 
-        // `-d` pins mihomo runtime home directory to CatBar working root.
+        // `-d` pins mihomo runtime home directory to ClashBar working root.
         // This prevents fallback to ~/.config/mihomo for provider/cache updates.
         let args = ["-d", workingDirectoryURL.path, "-f", configPath, "-ext-ctl", controller]
         proc.arguments = args
@@ -491,7 +491,7 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
             return managedPath
         } catch {
             throw NSError(
-                domain: "CatBar.Core",
+                domain: "ClashBar.Core",
                 code: 500,
                 userInfo: [
                     NSLocalizedDescriptionKey:
@@ -530,7 +530,7 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown error"
                 try? self.fileManager.removeItem(atPath: temporaryPath)
                 throw NSError(
-                    domain: "CatBar.Core",
+                    domain: "ClashBar.Core",
                     code: 500,
                     userInfo: [
                         NSLocalizedDescriptionKey:
@@ -545,11 +545,11 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
         } catch {
             try? outputHandle.close()
             try? self.fileManager.removeItem(atPath: temporaryPath)
-            if let error = error as NSError?, error.domain == "CatBar.Core" {
+            if let error = error as NSError?, error.domain == "ClashBar.Core" {
                 throw error
             }
             throw NSError(
-                domain: "CatBar.Core",
+                domain: "ClashBar.Core",
                 code: 500,
                 userInfo: [
                     NSLocalizedDescriptionKey:
@@ -561,7 +561,7 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
     private func ensureExecutableIfNeeded(at path: String) throws {
         guard self.fileManager.fileExists(atPath: path) else {
             throw NSError(
-                domain: "CatBar.Core",
+                domain: "ClashBar.Core",
                 code: 404,
                 userInfo: [NSLocalizedDescriptionKey: "mihomo binary not found at \(path)"])
         }
@@ -576,13 +576,13 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
 
         if values.isSymbolicLink == true {
             throw NSError(
-                domain: "CatBar.Core",
+                domain: "ClashBar.Core",
                 code: 403,
                 userInfo: [NSLocalizedDescriptionKey: "mihomo binary path must not be a symbolic link: \(path)"])
         }
         if values.isRegularFile != true {
             throw NSError(
-                domain: "CatBar.Core",
+                domain: "ClashBar.Core",
                 code: 403,
                 userInfo: [NSLocalizedDescriptionKey: "mihomo binary must be a regular file: \(path)"])
         }
@@ -593,7 +593,7 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
             let ownerID = owner.intValue
             if ownerID != 0, ownerID != uid {
                 throw NSError(
-                    domain: "CatBar.Core",
+                    domain: "ClashBar.Core",
                     code: 403,
                     userInfo: [NSLocalizedDescriptionKey: "mihomo binary owner must be current user or root: \(path)"])
             }
@@ -604,7 +604,7 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
             // Refuse group-writable or world-writable executables.
             if (mode & 0o022) != 0 {
                 throw NSError(
-                    domain: "CatBar.Core",
+                    domain: "ClashBar.Core",
                     code: 403,
                     userInfo: [
                         NSLocalizedDescriptionKey:

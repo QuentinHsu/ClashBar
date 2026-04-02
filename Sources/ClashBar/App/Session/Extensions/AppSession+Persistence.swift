@@ -2,17 +2,6 @@ import Foundation
 
 @MainActor
 extension AppSession {
-    func restorePersistedPresentationSource() {
-        self.restoreLocalControllerDisplayFromSelectedConfigIfAvailable()
-
-        switch self.remoteMachineStore.activeTarget {
-        case .local:
-            self.restoreLocalPresentationSource()
-        case let .remote(machine):
-            self.restoreRemotePresentationSource(machine)
-        }
-    }
-
     func resolveSelectedConfigPath() async -> String? {
         if let selected = configRepository.selectedConfig {
             let selectedPath = self.syncSelectedConfigSelection(selected)
@@ -148,39 +137,5 @@ extension AppSession {
         guard filtered != remoteConfigSources else { return }
         remoteConfigSources = filtered
         self.persistRemoteConfigSources()
-    }
-
-    private func restoreLocalPresentationSource() {
-        if let selectedConfigPath = self.configRepository.selectedConfig?.path {
-            self.applyExternalControllerFromSelectedConfigFile(configPath: selectedConfigPath)
-        } else {
-            let fallbackController = "127.0.0.1:9090"
-            self.controller = fallbackController
-            self.controllerSecret = nil
-            self.externalControllerDisplay = fallbackController
-            self.localExternalControllerDisplay = fallbackController
-            self.controllerUIURL = self.makeControllerUIURL(fallbackController)
-            self.ensureAPIClient()
-        }
-
-        guard let snapshot = self.loadPersistedEditableSettingsSnapshot() else { return }
-        self.applyEditableSettingsSnapshotToUI(snapshot)
-        self.lastSyncedEditableSettings = snapshot
-        self.preserveLocalSettingsOnNextSync = true
-        self.pendingAppLaunchOverlaySettings = snapshot
-    }
-
-    private func restoreRemotePresentationSource(_ machine: RemoteMachine) {
-        let restoredSecret = machine.secret?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        self.controller = machine.controllerAddress
-        self.controllerSecret = restoredSecret?.isEmpty == false ? restoredSecret : nil
-        self.externalControllerDisplay = machine.displayAddress
-        self.controllerUIURL = self.makeControllerUIURL(machine.controllerAddress)
-        self.ensureAPIClient()
-
-        self.lastSyncedEditableSettings = nil
-        self.preserveLocalSettingsOnNextSync = false
-        self.pendingAppLaunchOverlaySettings = nil
     }
 }

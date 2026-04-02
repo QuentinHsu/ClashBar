@@ -2,9 +2,9 @@ import Foundation
 
 struct FindBundledConfigTemplateUseCase {
     private let candidateRelativePaths = [
-        "ConfigTemplates/CatBar.yaml",
-        "Resources/ConfigTemplates/CatBar.yaml",
-        "CatBar.yaml",
+        "ConfigTemplates/ClashBar.yaml",
+        "Resources/ConfigTemplates/ClashBar.yaml",
+        "ClashBar.yaml",
     ]
 
     func execute(

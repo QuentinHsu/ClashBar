@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 @main
-struct CatBarApp: App {
-    @NSApplicationDelegateAdaptor(CatBarAppDelegate.self) private var appDelegate
+struct ClashBarApp: App {
+    @NSApplicationDelegateAdaptor(ClashBarAppDelegate.self) private var appDelegate
 
     private var commandsViewModel: AppCommandsViewModel {
         AppCommandsViewModel(session: self.appDelegate.appSession)
@@ -44,30 +44,25 @@ struct CatBarApp: App {
                 }
                 .keyboardShortcut("1", modifiers: [.command, .option])
 
-                Button(self.tr("ui.tab.nodes")) {
-                    self.commandsViewModel.setActiveMenuTab(.nodes)
-                }
-                .keyboardShortcut("2", modifiers: [.command, .option])
-
                 Button(self.tr("ui.tab.rules")) {
                     self.commandsViewModel.setActiveMenuTab(.rules)
                 }
-                .keyboardShortcut("3", modifiers: [.command, .option])
+                .keyboardShortcut("2", modifiers: [.command, .option])
 
                 Button(self.tr("ui.tab.connections")) {
                     self.commandsViewModel.setActiveMenuTab(.connections)
                 }
-                .keyboardShortcut("4", modifiers: [.command, .option])
+                .keyboardShortcut("3", modifiers: [.command, .option])
 
                 Button(self.tr("ui.tab.logs")) {
                     self.commandsViewModel.setActiveMenuTab(.logs)
                 }
-                .keyboardShortcut("5", modifiers: [.command, .option])
+                .keyboardShortcut("4", modifiers: [.command, .option])
 
                 Button(self.tr("ui.tab.system")) {
                     self.commandsViewModel.setActiveMenuTab(.system)
                 }
-                .keyboardShortcut("6", modifiers: [.command, .option])
+                .keyboardShortcut("5", modifiers: [.command, .option])
 
                 Button(self.tr("ui.tab.system")) {
                     self.commandsViewModel.setActiveMenuTab(.system)
@@ -80,11 +75,6 @@ struct CatBarApp: App {
                     Task { await self.commandsViewModel.refreshActiveTab() }
                 }
                 .keyboardShortcut("K", modifiers: [.command, .shift])
-
-                Button(self.tr("ui.action.check_app_updates")) {
-                    self.appDelegate.appUpdater.checkForUpdates()
-                }
-                .keyboardShortcut("U", modifiers: [.command, .option])
 
                 Button(self.tr("ui.quick.copy_terminal")) {
                     self.commandsViewModel.copyProxyCommand()
@@ -111,7 +101,7 @@ struct CatBarApp: App {
 }
 
 @MainActor
-final class CatBarAppDelegate: NSObject, NSApplicationDelegate {
+final class ClashBarAppDelegate: NSObject, NSApplicationDelegate {
     let container = DependencyContainer()
     private var statusItemController: StatusItemController?
 
@@ -119,18 +109,12 @@ final class CatBarAppDelegate: NSObject, NSApplicationDelegate {
         self.container.appSession
     }
 
-    var appUpdater: AppUpdater {
-        self.container.appUpdater
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let image = BrandIcon.image {
             NSApp.applicationIconImage = image
         }
         NSApp.setActivationPolicy(.accessory)
-        self.statusItemController = StatusItemController(
-            appSession: self.appSession,
-            appUpdater: self.appUpdater)
+        self.statusItemController = StatusItemController(appSession: self.appSession)
         self.appSession.presentInitialNoCoreSetupGuideIfNeeded()
     }
 
@@ -138,23 +122,8 @@ final class CatBarAppDelegate: NSObject, NSApplicationDelegate {
         self.appSession.handleApplicationDidBecomeActive()
     }
 
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // When quitApp() drives the exit, cleanup has already been performed
-        // asynchronously — terminate immediately.
-        if self.appSession.isQuittingApp {
-            return .terminateNow
-        }
-
-        // Cmd-Q / system-initiated quit — perform async cleanup first.
-        self.appSession.isQuittingApp = true
-        Task { @MainActor in
-            await self.appSession.performTerminationCleanup()
-            NSApp.reply(toApplicationShouldTerminate: true)
-        }
-        return .terminateLater
-    }
-
     func applicationWillTerminate(_ notification: Notification) {
+        self.appSession.shutdownForTermination()
         self.statusItemController?.shutdown()
         self.statusItemController = nil
     }

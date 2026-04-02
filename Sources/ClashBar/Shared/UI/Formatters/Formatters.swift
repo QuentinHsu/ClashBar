@@ -33,38 +33,18 @@ private final class TimestampCacheBox: @unchecked Sendable {
 }
 
 enum ValueFormatter {
-    private static let timestampFormatterKey = "catbar.formatter.timestamp"
+    private static let timestampFormatterKey = "clashbar.formatter.timestamp"
     private static let timestampCache = TimestampCacheBox()
 
-    private static let iso8601WithFractionalKey = "catbar.formatter.iso8601.fractional"
-    private static let iso8601BasicKey = "catbar.formatter.iso8601.basic"
-    private static let timeFormatterKey = "catbar.formatter.time"
+    private static let iso8601WithFractionalKey = "clashbar.formatter.iso8601.fractional"
+    private static let iso8601BasicKey = "clashbar.formatter.iso8601.basic"
 
     static func speed(_ value: Int64) -> String {
-        let (formatted, unit) = speedComponents(value)
-        return "\(formatted)\(unit)/s"
-    }
-
-    static func speedCompact(_ value: Int64) -> String {
-        let (formatted, unit) = speedComponents(value)
-        return "\(formatted)\(unit)/s"
-    }
-
-    private static func speedComponents(_ bytesPerSecond: Int64) -> (String, String) {
-        let normalized = max(0, bytesPerSecond)
-        var value = Double(normalized) / 1024
-        let units = ["KB", "MB", "GB", "TB"]
-        var unitIndex = 0
-
-        while value >= 1000, unitIndex < units.count - 1 {
-            value /= 1024
-            unitIndex += 1
+        let normalized = max(0, value)
+        if normalized >= 1024 * 1024 {
+            return String(format: "%.2f MB/s", Double(normalized) / (1024 * 1024))
         }
-
-        if unitIndex == 0 {
-            return (String(format: "%.0f", value), units[unitIndex])
-        }
-        return (String(format: "%.2f", value), units[unitIndex])
+        return String(format: "%.2f KB/s", Double(normalized) / 1024)
     }
 
     static func bytesInteger(_ value: Int64) -> String {
@@ -88,20 +68,20 @@ enum ValueFormatter {
         }
 
         if normalized == 0 {
-            return "0KB"
+            return "0 KB"
         }
-        return "1KB"
+        return "1 KB"
     }
 
     static func bytesCompact(_ value: Int64) -> String {
         let normalized = max(0, value)
         if normalized >= 1024 * 1024 * 1024 {
-            return String(format: "%.1fGB", Double(normalized) / (1024 * 1024 * 1024))
+            return String(format: "%.1f GB", Double(normalized) / (1024 * 1024 * 1024))
         }
         if normalized >= 1024 * 1024 {
-            return String(format: "%.1fMB", Double(normalized) / (1024 * 1024))
+            return String(format: "%.1f MB", Double(normalized) / (1024 * 1024))
         }
-        return String(format: "%.1fKB", Double(normalized) / 1024)
+        return String(format: "%.1f KB", Double(normalized) / 1024)
     }
 
     static func bytesCompactNoSpace(_ value: Int64) -> String {
@@ -186,14 +166,6 @@ enum ValueFormatter {
         return self.dateTime(date)
     }
 
-    static func timeFromISO(_ input: String?) -> String {
-        guard let input = input?.trimmingCharacters(in: .whitespacesAndNewlines), !input.isEmpty else {
-            return "--"
-        }
-        guard let date = parseISO8601Date(input) else { return "--" }
-        return self.threadLocalTimeFormatter().string(from: date)
-    }
-
     static func daysUntilExpiryShort(from unixSeconds: Int64?, language: AppLanguage, now: Date = Date()) -> String {
         guard let unixSeconds else { return L10n.t("fmt.common.unknown", language: language) }
         if unixSeconds == 0 {
@@ -226,7 +198,7 @@ enum ValueFormatter {
     private static func roundedBytesText(_ value: Int64, divisor: Double, unit: String) -> String {
         let scaled = Double(value) / divisor
         let rounded = Int(scaled.rounded())
-        return "\(rounded)\(unit)"
+        return "\(rounded) \(unit)"
     }
 
     private static func parseISO8601Date(_ input: String) -> Date? {
@@ -245,18 +217,6 @@ enum ValueFormatter {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         Thread.current.threadDictionary[self.timestampFormatterKey] = formatter
-        return formatter
-    }
-
-    private static func threadLocalTimeFormatter() -> DateFormatter {
-        if let formatter = Thread.current.threadDictionary[self.timeFormatterKey] as? DateFormatter {
-            return formatter
-        }
-
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "HH:mm:ss"
-        Thread.current.threadDictionary[self.timeFormatterKey] = formatter
         return formatter
     }
 

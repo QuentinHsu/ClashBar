@@ -179,18 +179,9 @@ extension MenuBarRootView {
     var machineSwitcherSubtitle: String {
         switch remoteMachineStore.activeTarget {
         case .local:
-            ""
-        case .remote:
-            switch self.machineSwitcherStatus {
-            case .unknown, nil:
-                tr("ui.machine.status_unknown")
-            case .checking:
-                tr("ui.machine.status_checking")
-            case .connected:
-                tr("ui.machine.status_connected")
-            case let .failed(reason):
-                reason.isEmpty ? tr("ui.machine.status_unreachable") : reason
-            }
+            appSession.externalControllerDisplay
+        case let .remote(machine):
+            machine.displayAddress
         }
     }
 
@@ -198,14 +189,14 @@ extension MenuBarRootView {
         switch self.machineSwitcherStatus {
         case .unknown, nil:
             remoteMachineStore.activeTarget.isLocal
-                ? self.localSourceTint
+                ? nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid)
                 : nativeSecondaryLabel
         case .checking:
-            nativeSecondaryLabel
+            nativeWarning.opacity(MenuBarLayoutTokens.Opacity.solid)
         case .connected:
             nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid)
         case .failed:
-            nativeSecondaryLabel
+            nativeCritical.opacity(MenuBarLayoutTokens.Opacity.solid)
         }
     }
 
@@ -251,12 +242,14 @@ extension MenuBarRootView {
 
     func machineStatusTint(_ status: MachineConnectionStatus) -> Color {
         switch status {
-        case .unknown, .checking:
+        case .unknown:
             nativeSecondaryLabel
+        case .checking:
+            nativeWarning.opacity(MenuBarLayoutTokens.Opacity.solid)
         case .connected:
             nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid)
         case .failed:
-            nativeSecondaryLabel
+            nativeCritical.opacity(MenuBarLayoutTokens.Opacity.solid)
         }
     }
 
@@ -357,7 +350,9 @@ extension MenuBarRootView {
 
         return Button {
             guard self.rootViewModel.currentTab != tab else { return }
-            self.rootViewModel.syncCurrentTab(tab)
+            withAnimation(.snappy(duration: 0.18)) {
+                self.rootViewModel.syncCurrentTab(tab)
+            }
         } label: {
             ZStack(alignment: .bottom) {
                 Text(self.tr(tab.titleKey))

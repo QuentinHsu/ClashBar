@@ -72,18 +72,6 @@ struct ProviderDetail: Decodable, Equatable {
             subscriptionInfo: self.subscriptionInfo,
             proxies: proxies)
     }
-
-    func with(updatedAt: String) -> ProviderDetail {
-        ProviderDetail(
-            name: self.name,
-            vehicleType: self.vehicleType,
-            testUrl: self.testUrl,
-            timeout: self.timeout,
-            updatedAt: updatedAt,
-            ruleCount: self.ruleCount,
-            subscriptionInfo: self.subscriptionInfo,
-            proxies: self.proxies)
-    }
 }
 
 struct ProviderSubscriptionInfo: Decodable, Equatable {
@@ -113,49 +101,22 @@ struct ProviderSubscriptionInfo: Decodable, Equatable {
 }
 
 struct ProviderProxyNode: Decodable, Equatable {
-    let id: String?
     let name: String
-    let type: String?
-    let alive: Bool?
-    let providerName: String?
     let latestDelay: Int?
 
-    var stableIdentity: String {
-        self.id ?? self.name
-    }
-
     private enum CodingKeys: String, CodingKey {
-        case id
         case name
-        case type
-        case alive
-        case providerName = "provider-name"
         case history
     }
 
-    init(
-        id: String? = nil,
-        name: String,
-        type: String? = nil,
-        alive: Bool? = nil,
-        providerName: String? = nil,
-        latestDelay: Int? = nil)
-    {
-        self.id = id?.trimmedNonEmpty
+    init(name: String, latestDelay: Int? = nil) {
         self.name = name
-        self.type = type?.trimmedNonEmpty
-        self.alive = alive
-        self.providerName = providerName?.trimmedNonEmpty
         self.latestDelay = latestDelay
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.id = try container.decodeIfPresent(String.self, forKey: .id).trimmedNonEmpty
         self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? "-"
-        self.type = try container.decodeIfPresent(String.self, forKey: .type).trimmedNonEmpty
-        self.alive = try container.decodeIfPresent(Bool.self, forKey: .alive)
-        self.providerName = try container.decodeIfPresent(String.self, forKey: .providerName).trimmedNonEmpty
         self.latestDelay = container.decodeLatestDelay(forKey: .history)
     }
 }

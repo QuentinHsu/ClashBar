@@ -4,7 +4,7 @@ import Foundation
 extension AppSession {
     func ensureLogFileExists() {
         self.flushPendingMihomoLogsIfNeeded()
-        catbarLogStore?.ensureLogFileExists()
+        clashbarLogStore?.ensureLogFileExists()
         mihomoLogStore?.ensureLogFileExists()
     }
 
@@ -13,12 +13,12 @@ extension AppSession {
         mihomoLogFlushTask = nil
         pendingMihomoLogs.removeAll(keepingCapacity: true)
         errorLogs.removeAll(keepingCapacity: false)
-        catbarLogStore?.clear()
+        clashbarLogStore?.clear()
         mihomoLogStore?.clear()
     }
 
     func appendLog(level: String, message: String) {
-        self.appendLog(source: .catbar, level: level, message: message)
+        self.appendLog(source: .clashbar, level: level, message: message)
     }
 
     func appendMihomoLog(level: String, message: String) {
@@ -98,9 +98,9 @@ extension AppSession {
     private func persistLogEntriesToFile(_ entries: [AppErrorLogEntry]) {
         guard !entries.isEmpty else { return }
 
-        let catbarEntries = entries.filter { $0.source == .catbar }
-        if !catbarEntries.isEmpty {
-            catbarLogStore?.append(entries: catbarEntries)
+        let clashbarEntries = entries.filter { $0.source == .clashbar }
+        if !clashbarEntries.isEmpty {
+            clashbarLogStore?.append(entries: clashbarEntries)
         }
 
         let mihomoEntries = entries.filter { $0.source == .mihomo }

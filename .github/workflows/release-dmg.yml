@@ -1,21 +1,18 @@
 name: Release DMG
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 on:
   push:
     tags:
-      - "v*"
-      - "*.*.*"
+      - 'v*'
+      - '*.*.*'
   workflow_dispatch:
     inputs:
       tag:
-        description: "Optional explicit tag (v1.2.3 or 1.2.3). Leave empty to auto-increment."
+        description: 'Optional explicit tag (v1.2.3 or 1.2.3). Leave empty to auto-increment.'
         required: false
         type: string
       bump:
-        description: "Version bump when tag is empty."
+        description: 'Version bump when tag is empty.'
         required: false
         default: auto
         type: choice
@@ -35,10 +32,9 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       build_number: ${{ steps.version.outputs.build_number }}
-      previous_tag: ${{ steps.version.outputs.previous_tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -70,7 +66,6 @@ jobs:
 
           tag=""
           version=""
-          previous_tag=""
 
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             tag="${GITHUB_REF_NAME}"
@@ -78,11 +73,6 @@ jobs:
               echo "Tag '$tag' is not valid (expected v1.2.3 or 1.2.3)." >&2
               exit 1
             fi
-            previous_tag="$(
-              git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
-                | grep -Fxv "$tag" \
-                | head -n 1 || true
-            )"
           else
             git fetch --tags --force
 
@@ -92,18 +82,13 @@ jobs:
                 exit 1
               fi
               version="$(extract_version "$tag")"
-              previous_tag="$(
-                git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
-                  | grep -Fxv "$tag" \
-                  | head -n 1 || true
-              )"
             else
-              previous_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
+              last_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
               base_version="0.0.0"
               range="HEAD"
-              if [[ -n "$previous_tag" ]]; then
-                base_version="${previous_tag#v}"
-                range="${previous_tag}..HEAD"
+              if [[ -n "$last_tag" ]]; then
+                base_version="${last_tag#v}"
+                range="${last_tag}..HEAD"
               fi
 
               bump="${INPUT_BUMP:-auto}"
@@ -119,7 +104,7 @@ jobs:
                 fi
 
                 if [[ -z "$bump" ]]; then
-                  echo "No releasable commits found since ${previous_tag:-repository start}. Set bump manually." >&2
+                  echo "No releasable commits found since ${last_tag:-repository start}. Set bump manually." >&2
                   exit 1
                 fi
               fi
@@ -146,88 +131,23 @@ jobs:
               esac
               tag="v${major}.${minor}.${patch}"
               version="${major}.${minor}.${patch}"
-              echo "Auto-calculated tag: $tag (bump: $bump, base: ${previous_tag:-none})"
+              echo "Auto-calculated tag: $tag (bump: $bump, base: ${last_tag:-none})"
+            fi
+
+            if git ls-remote --tags origin "refs/tags/${tag}" | grep -q .; then
+              echo "Tag ${tag} already exists on origin, reusing it."
+            else
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git tag "$tag"
+              git push origin "$tag"
+              echo "Created and pushed tag: $tag"
             fi
           fi
 
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "build_number=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-          echo "previous_tag=${previous_tag}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Node.js for optional Copilot summary
-        if: github.event_name != 'push'
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-
-      - name: Install Copilot CLI when token is configured
-        if: github.event_name != 'push'
-        shell: bash
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${COPILOT_GITHUB_TOKEN:-}" ]]; then
-            echo "COPILOT_GITHUB_TOKEN is not configured. Skipping Copilot CLI installation."
-            exit 0
-          fi
-
-          npm install -g @github/copilot
-
-      - name: Update changelog from commits
-        if: github.event_name != 'push'
-        shell: bash
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          if [[ -n "${COPILOT_GITHUB_TOKEN:-}" ]]; then
-            export CHANGELOG_SUMMARY_COMMAND='copilot -p "$(cat {prompt_file})"'
-            echo "Using Copilot CLI for changelog summary."
-          else
-            echo "COPILOT_GITHUB_TOKEN is not configured. Falling back to local changelog summary."
-          fi
-
-          python3 Scripts/update_changelog.py \
-            --version "${{ steps.version.outputs.version }}" \
-            --from-ref "${{ steps.version.outputs.previous_tag }}" \
-            --to-ref HEAD \
-            --mode write
-
-      - name: Commit changelog
-        if: github.event_name != 'push'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- CHANGELOG.md; then
-            echo "CHANGELOG.md unchanged."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git commit -m "docs(changelog): release ${{ steps.version.outputs.version }}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-
-      - name: Create and push release tag
-        if: github.event_name != 'push'
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${{ steps.version.outputs.tag }}"
-          if git ls-remote --tags origin "refs/tags/${tag}" | grep -q .; then
-            echo "Tag ${tag} already exists on origin, reusing it."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$tag"
-          git push origin "$tag"
-          echo "Created and pushed tag: $tag"
+          echo "build_number=${version}" >> "$GITHUB_OUTPUT"
 
   build-dmg:
     needs: prepare-version
@@ -236,17 +156,27 @@ jobs:
       matrix:
         include:
           - target_arch: arm64
+            dmg_suffix: apple-silicon
+            artifact_name: dmg-arm64
+            bundle_mihomo_binary: '1'
+          - target_arch: arm64
             dmg_suffix: apple-silicon-no-core
             artifact_name: dmg-arm64-no-core
+            bundle_mihomo_binary: '0'
+          - target_arch: x86_64
+            dmg_suffix: intel
+            artifact_name: dmg-x86_64
+            bundle_mihomo_binary: '1'
           - target_arch: x86_64
             dmg_suffix: intel-no-core
             artifact_name: dmg-x86_64-no-core
+            bundle_mihomo_binary: '0'
     runs-on: macos-15
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare-version.outputs.tag }}
 
@@ -271,11 +201,8 @@ jobs:
         run: |
           APP_VERSION="${{ needs.prepare-version.outputs.version }}" \
           BUILD_NUMBER="${{ needs.prepare-version.outputs.build_number }}" \
-          REPOSITORY_SLUG="${{ github.repository }}" \
-          SPARKLE_PUBLIC_ED_KEY="${{ vars.SPARKLE_PUBLIC_ED_KEY }}" \
-          SPARKLE_FEED_BASE_URL="https://github.com/${{ github.repository }}/releases/latest/download" \
-          PREPARE_MIHOMO_BINARY="0" \
-          BUNDLE_MIHOMO_BINARY="0" \
+          PREPARE_MIHOMO_BINARY="${{ matrix.bundle_mihomo_binary }}" \
+          BUNDLE_MIHOMO_BINARY="${{ matrix.bundle_mihomo_binary }}" \
           TARGET_ARCH="${{ matrix.target_arch }}" \
           ./Scripts/build.sh app
 
@@ -286,48 +213,13 @@ jobs:
           DMG_SUFFIX="${{ matrix.dmg_suffix }}" \
           ./Scripts/build.sh dmg
 
-      - name: Generate Sparkle appcast
-        shell: bash
-        env:
-          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
-          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          if [[ -z "${SPARKLE_PRIVATE_ED_KEY:-}" || -z "${SPARKLE_PUBLIC_ED_KEY:-}" ]]; then
-            echo "Sparkle keys are not configured. Skipping appcast generation."
-            exit 0
-          fi
-
-          sign_update_tool="$(find .build -path '*/Sparkle*/bin/sign_update' -type f | head -n 1 || true)"
-          if [[ -z "$sign_update_tool" || ! -x "$sign_update_tool" ]]; then
-            echo "Sparkle sign_update tool not found under .build" >&2
-            exit 1
-          fi
-
-          dmg_name="CatBar-${{ needs.prepare-version.outputs.version }}-${{ matrix.dmg_suffix }}.dmg"
-
-          python3 Scripts/generate_sparkle_appcast.py \
-            --dmg "dist/${dmg_name}" \
-            --sign-update-tool "$sign_update_tool" \
-            --private-key-stdin "$SPARKLE_PRIVATE_ED_KEY" \
-            --download-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ needs.prepare-version.outputs.tag }}/${dmg_name}" \
-            --release-notes-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${{ needs.prepare-version.outputs.tag }}" \
-            --version "${{ needs.prepare-version.outputs.version }}" \
-            --build-version "${{ needs.prepare-version.outputs.build_number }}" \
-            --minimum-system-version "13.0" \
-            --title "CatBar ${{ needs.prepare-version.outputs.version }}" \
-            --output "dist/appcast-${{ matrix.dmg_suffix }}.xml"
-
       - name: Upload dmg artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
-            dist/CatBar-${{ needs.prepare-version.outputs.version }}-${{ matrix.dmg_suffix }}.dmg
-            dist/CatBar-${{ needs.prepare-version.outputs.version }}-${{ matrix.dmg_suffix }}.dmg.sha256
-            dist/appcast-${{ matrix.dmg_suffix }}.xml
+            dist/ClashBar-${{ needs.prepare-version.outputs.version }}-${{ matrix.dmg_suffix }}.dmg
+            dist/ClashBar-${{ needs.prepare-version.outputs.version }}-${{ matrix.dmg_suffix }}.dmg.sha256
           if-no-files-found: error
 
   release:
@@ -337,12 +229,12 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare-version.outputs.tag }}
 
       - name: Download dmg artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           pattern: dmg-*
           merge-multiple: true
@@ -363,11 +255,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare-version.outputs.tag }}
-          name: CatBar ${{ needs.prepare-version.outputs.version }}
+          name: ClashBar ${{ needs.prepare-version.outputs.version }}
           body_path: release.md
-          generate_release_notes: false
-          fail_on_unmatched_files: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             dist/*.dmg
-            dist/*.sha256
-            dist/appcast-*.xml

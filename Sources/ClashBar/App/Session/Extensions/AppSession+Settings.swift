@@ -100,10 +100,6 @@ extension AppSession {
     }
 
     func applyProxyPorts(autoSaved: Bool = false) async {
-        if autoSaved, !proxyPortFieldsDifferFromLastSync() {
-            return
-        }
-
         guard let body = self.validatedPortPatchBody(
             fields: self.proxyPortFields,
             errorMessageKey: "app.settings.error.port_range",
@@ -118,7 +114,6 @@ extension AppSession {
     func scheduleProxyPortsAutoSaveIfNeeded() {
         guard !suppressSettingsPersistence else { return }
         guard settingsSyncingKey == nil else { return }
-        guard proxyPortFieldsDifferFromLastSync() else { return }
 
         proxyPortsAutoSaveTask?.cancel()
         proxyPortsAutoSaveTask = Task { [weak self] in
@@ -444,22 +439,6 @@ extension AppSession {
         }
     }
 
-    func presentSettingsFeedback(successMessage: String? = nil, errorMessage: String? = nil) {
-        settingsFeedbackClearTask?.cancel()
-        settingsFeedbackClearTask = nil
-
-        if let errorMessage = errorMessage?.trimmedNonEmpty {
-            settingsErrorMessage = errorMessage
-            settingsSavedMessage = nil
-            return
-        }
-
-        guard let successMessage = successMessage?.trimmedNonEmpty else { return }
-        settingsErrorMessage = nil
-        settingsSavedMessage = successMessage
-        self.scheduleSettingsFeedbackAutoClearIfNeeded(message: successMessage)
-    }
-
     func clientOrThrow() throws -> MihomoAPIClient {
         if apiClient == nil {
             ensureAPIClient()
@@ -492,7 +471,7 @@ extension AppSession {
         guard shouldSync, isSystemProxyEnabled else { return }
 
         do {
-            let target = try self.resolveSystemProxyTargetFromState()
+            let target = try await resolveSystemProxyTargetFromRuntimeConfig()
             try await applySystemProxy(enabled: true, host: target.host, ports: target.ports)
             systemProxyActiveDisplay = buildSystemProxyDisplayString(host: target.host, ports: target.ports)
             appendLog(level: "info", message: tr("log.system_proxy.port_synced", target.ports.primaryPort ?? 0))
@@ -563,15 +542,6 @@ extension AppSession {
             settingsSavedMessage = nil
             return nil
         }
-    }
-
-    private func proxyPortFieldsDifferFromLastSync() -> Bool {
-        guard let synced = lastSyncedEditableSettings else { return false }
-        return settingsPort != synced.port
-            || settingsSocksPort != synced.socksPort
-            || settingsMixedPort != synced.mixedPort
-            || settingsRedirPort != synced.redirPort
-            || settingsTProxyPort != synced.tproxyPort
     }
 
     private func syncEditableFields<Value: Equatable>(

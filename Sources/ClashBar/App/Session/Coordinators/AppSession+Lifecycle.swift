@@ -19,6 +19,10 @@ extension AppSession {
         RestartCoreUseCase(coreRepository: self.coreRepository)
     }
 
+    private var clearSystemProxyBlockingUseCase: ClearSystemProxyBlockingUseCase {
+        ClearSystemProxyBlockingUseCase(repository: self.systemProxyRepository)
+    }
+
     private struct CoreBootstrapOptions {
         let overlaySyncingKey: String
         let providerTrigger: ProviderRefreshTrigger
@@ -205,44 +209,21 @@ extension AppSession {
         self.applyAppAppearance()
     }
 
-    /// Perform all cleanup asynchronously while the loading indicator is visible,
-    /// then terminate the app.  This avoids `terminate(nil)`'s nested run loop
-    /// (which prevents SwiftUI rendering) by doing all heavy work **before**
-    /// calling terminate.
     func quitApp() async {
-        guard !self.isQuittingApp else { return }
-        self.isQuittingApp = true
-
-        // Yield so SwiftUI commits the loading-indicator frame before we begin
-        // any blocking-capable work.  100 ms ≈ 6 display-refresh cycles at 60 Hz.
-        try? await Task.sleep(nanoseconds: 100_000_000)
-
-        await self.performTerminationCleanup()
-
-        // Cleanup is complete — terminate instantly.
-        // applicationShouldTerminate will see isQuittingApp == true and return
-        // .terminateNow, so terminate() won't block.
+        self.prepareForTermination()
+        self.isPanelPresented = false
+        for window in NSApplication.shared.windows {
+            window.orderOut(nil)
+        }
         NSApplication.shared.terminate(nil)
     }
 
-    /// Async cleanup shared by ``quitApp()`` and the Cmd-Q / system-quit path
-    /// in `applicationShouldTerminate(.terminateLater)`.
-    func performTerminationCleanup() async {
+    func shutdownForTermination() {
         self.prepareForTermination()
-
-        if self.isSystemProxyEnabled {
-            try? await self.applySystemProxy(
-                enabled: false,
-                host: self.controllerHost(),
-                ports: .disabled)
-        }
-
+        self.clearSystemProxyBlockingUseCase.execute(timeout: 2.0)
         if coreRepository.isRunning {
-            // Runs the blocking waitForProcessExit on a background queue.
-            await self.stopCoreUseCase.execute()
+            self.stopCoreUseCase.executeImmediately()
         }
-
-        self.isPanelPresented = false
     }
 
     private func prepareForTermination() {
@@ -344,9 +325,8 @@ extension AppSession {
         pendingConfigSwitchOverlaySettings = currentEditableSettingsSnapshot()
         preserveLocalSettingsOnNextSync = true
         proxyGroups = []
-        clearMeasuredProxyDelays()
+        groupLatencies = [:]
         proxyNodeTypes = [:]
-        proxyNodeIDs = [:]
         groupLatencyLoading = []
         appendLog(level: "info", message: tr("log.config.changed_restart"))
         cancelProviderRefresh(reason: "config switch requested")
@@ -535,7 +515,7 @@ extension AppSession {
             defer { self.isProxySyncing = false }
 
             do {
-                let target = try self.resolveSystemProxyTargetFromState()
+                let target = try await self.resolveSystemProxyTargetFromRuntimeConfig()
                 let isAlreadyConfigured = try await self.isSystemProxyConfigured(
                     host: target.host,
                     ports: target.ports)

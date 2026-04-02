@@ -23,7 +23,7 @@ extension AppSession {
     }
 
     var appReleaseIndexURL: URL? {
-        AppReleaseConfiguration.releasesPageURL
+        URL(string: "https://github.com/Sitoi/ClashBar/releases")
     }
 
     func refreshLatestAppRelease() async {

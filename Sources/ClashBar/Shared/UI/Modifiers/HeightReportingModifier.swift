@@ -8,11 +8,7 @@ struct HeightReportingModifier: ViewModifier {
             GeometryReader { geometry in
                 Color.clear
                     .task(id: geometry.size.height) {
-                        var t = Transaction(animation: nil)
-                        t.disablesAnimations = true
-                        withTransaction(t) {
-                            self.onChange(geometry.size.height)
-                        }
+                        self.onChange(geometry.size.height)
                     }
             }
         }

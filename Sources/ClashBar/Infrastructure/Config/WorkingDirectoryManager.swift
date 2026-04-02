@@ -8,7 +8,7 @@ struct WorkingDirectoryManager {
     }
 
     var rootDirectoryURL: URL {
-        self.homeDirectory.appendingPathComponent("Library/Application Support/catbar", isDirectory: true)
+        self.homeDirectory.appendingPathComponent("Library/Application Support/clashbar", isDirectory: true)
     }
 
     var configDirectoryURL: URL {
@@ -44,16 +44,16 @@ struct WorkingDirectoryManager {
         let root = self.rootDirectoryURL.standardizedFileURL.resolvingSymlinksInPath()
         guard self.isDescendantOrEqual(standardized, parent: root) else {
             throw NSError(
-                domain: "CatBar.PathSecurity",
+                domain: "ClashBar.PathSecurity",
                 code: 403,
-                userInfo: [NSLocalizedDescriptionKey: "Path escapes CatBar working directory: \(standardized.path)"])
+                userInfo: [NSLocalizedDescriptionKey: "Path escapes ClashBar working directory: \(standardized.path)"])
         }
 
         if let mustBeDirectory {
             let values = try standardized.resourceValues(forKeys: [.isDirectoryKey])
             if values.isDirectory != mustBeDirectory {
                 throw NSError(
-                    domain: "CatBar.PathSecurity",
+                    domain: "ClashBar.PathSecurity",
                     code: 400,
                     userInfo: [NSLocalizedDescriptionKey: mustBeDirectory
                         ? "Expected directory path: \(standardized.path)"
@@ -69,7 +69,7 @@ struct WorkingDirectoryManager {
         if fileManager.fileExists(atPath: url.path, isDirectory: &isDir) {
             if !isDir.boolValue {
                 throw NSError(
-                    domain: "CatBar.PathSecurity",
+                    domain: "ClashBar.PathSecurity",
                     code: 409,
                     userInfo: [NSLocalizedDescriptionKey: "Expected directory but found file: \(url.path)"])
             }
