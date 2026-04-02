@@ -242,6 +242,40 @@ extension MenuBarRootView {
             })
     }
 
+    var settingsCopyProxyCommandRow: some View {
+        let localTargetDisplay = self.appSession.localProxyCommandTargetDisplay()
+        let managedTargetDisplay = self.appSession.managedEndpointProxyCommandTargetDisplay()
+        let showManagedTargetAction = localTargetDisplay != managedTargetDisplay
+
+        return HStack(spacing: T.space8) {
+            self.settingsRowLabel(symbol: "terminal", title: tr("ui.quick.copy_terminal"))
+                .layoutPriority(1)
+            Spacer(minLength: 0)
+            HStack(spacing: 2) {
+                self.proxyCommandActionButton(
+                    title: self.appSession.localProxyCommandHostDisplay(),
+                    target: .local,
+                    helpTitle: tr("ui.quick.copy_terminal"),
+                    helpDetail: localTargetDisplay)
+                {
+                    self.appSession.copyLocalProxyCommand()
+                }
+
+                if showManagedTargetAction {
+                    self.proxyCommandActionButton(
+                        title: self.appSession.managedEndpointProxyCommandHostDisplay(),
+                        target: .currentEndpoint,
+                        helpTitle: tr("ui.quick.copy_terminal_current_endpoint"),
+                        helpDetail: managedTargetDisplay)
+                    {
+                        self.appSession.copyManagedEndpointProxyCommand()
+                    }
+                }
+            }
+        }
+        .menuRowPadding(vertical: T.space4)
+    }
+
     var systemTabBody: some View {
         let isRemote = appSession.isRemoteTarget
         let proxyPortFields: [(titleKey: String, symbol: String, text: Binding<String>)] = [
@@ -298,6 +332,76 @@ extension MenuBarRootView {
         let selectedLogLevel = appSession.stringValue(for: .logLevel)
 
         return VStack(alignment: .leading, spacing: T.space6) {
+            VStack(spacing: 0) {
+                self.settingsCardHeader(
+                    tr("ui.section.proxy_control"),
+                    symbol: "antenna.radiowaves.left.and.right")
+
+                if isRemote {
+                    HStack(spacing: T.space8) {
+                        self.settingsRowLabel(symbol: "doc.text", title: tr("ui.quick.switch_config"))
+                            .layoutPriority(1)
+                        Spacer(minLength: 0)
+                        Text(tr("ui.machine.remote_readonly"))
+                            .font(.app(size: T.FontSize.caption, weight: .regular))
+                            .foregroundStyle(nativeTertiaryLabel)
+                    }
+                    .menuRowPadding(vertical: T.space4)
+                } else {
+                    HStack(spacing: T.space8) {
+                        self.settingsRowLabel(symbol: "doc.text", title: tr("ui.quick.switch_config"))
+                            .layoutPriority(1)
+                        Spacer(minLength: 0)
+                        AttachedPopoverMenu(
+                            onWillPresent: {
+                                self.appSession.refreshRemoteConfigMenuStates()
+                            },
+                            label: { _ in
+                                HStack(spacing: T.space2) {
+                                    Text(appSession.selectedConfigName)
+                                        .foregroundStyle(nativeSecondaryLabel)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                    Image(systemName: "chevron.right")
+                                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                                        .foregroundStyle(nativeTertiaryLabel)
+                                }
+                                .font(.app(size: T.FontSize.caption, weight: .medium))
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                            },
+                            content: { dismiss in
+                                self.configMenuContent(dismiss: dismiss)
+                            })
+                            .frame(width: self.settingsMenuControlWidth, alignment: .trailing)
+                            .appBorderedButtonStyle()
+                            .controlSize(.small)
+                    }
+                    .menuRowPadding(vertical: T.space4)
+                }
+
+                self.settingsToggleRow(
+                    self.systemProxyRowTitle,
+                    symbol: "network",
+                    isOn: Binding(
+                        get: { appSession.isSystemProxyEnabled },
+                        set: { value in
+                            Task { await appSession.toggleSystemProxy(value) }
+                        }),
+                    isDisabled: appSession.isProxySyncing)
+
+                self.settingsToggleRow(
+                    tr("ui.quick.tun_mode"),
+                    symbol: "shield.lefthalf.filled",
+                    isOn: Binding(
+                        get: { appSession.isTunEnabled },
+                        set: { value in
+                            Task { await appSession.toggleTunMode(value) }
+                        }),
+                    isDisabled: !appSession.isTunToggleEnabled)
+
+                self.settingsCopyProxyCommandRow
+            }
+
             VStack(spacing: 0) {
                 self.settingsCardHeader(
                     isRemote ? tr("ui.section.local_app_settings") : tr("ui.section.basic_settings"),

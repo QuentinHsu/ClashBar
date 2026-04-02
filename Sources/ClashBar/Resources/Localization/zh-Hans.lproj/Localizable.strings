@@ -71,6 +71,7 @@
 "ui.machine.remote_label" = "远程";
 "ui.machine.status_unreachable" = "无法连接";
 
+"ui.section.proxy_control" = "代理控制";
 "ui.section.local_app_settings" = "应用设置 (本地)";
 "ui.section.core_settings" = "内核设置";
 "ui.section.core_settings_remote" = "内核设置 (远程)";

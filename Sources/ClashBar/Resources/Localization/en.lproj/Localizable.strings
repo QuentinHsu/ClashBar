@@ -71,6 +71,7 @@
 "ui.machine.remote_label" = "Remote";
 "ui.machine.status_unreachable" = "Unreachable";
 
+"ui.section.proxy_control" = "Proxy Control";
 "ui.section.local_app_settings" = "App Settings (Local)";
 "ui.section.core_settings" = "Core Settings";
 "ui.section.core_settings_remote" = "Core Settings (Remote)";

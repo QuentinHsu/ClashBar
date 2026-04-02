@@ -120,7 +120,6 @@ extension MenuBarRootView {
     var proxyTabBody: some View {
         VStack(alignment: .leading, spacing: T.space6) {
             self.trafficOverview
-            self.proxyQuickRows
             if !appSession.sortedProxyProviderNames.isEmpty {
                 proxyProvidersSection
             }
