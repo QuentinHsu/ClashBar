@@ -173,7 +173,8 @@ struct MenuBarRootView: View {
                 self.refreshDerivedData(for: self.rootViewModel.currentTab)
                 self.rootViewModel.updateFilteredProxyGroups(
                     from: self.appSession.proxyGroups,
-                    hideHiddenGroups: self.hideHiddenProxyGroups)
+                    hideHiddenGroups: self.hideHiddenProxyGroups,
+                    mode: self.appSession.currentMode)
                 publishPreferredPanelHeight()
             }
             .onChange(of: self.rootViewModel.currentTab) { tab in
@@ -218,12 +219,20 @@ struct MenuBarRootView: View {
                     .onChange(of: self.appSession.proxyGroups) { newGroups in
                             self.rootViewModel.updateFilteredProxyGroups(
                                 from: newGroups,
-                                hideHiddenGroups: self.hideHiddenProxyGroups)
+                                hideHiddenGroups: self.hideHiddenProxyGroups,
+                                mode: self.appSession.currentMode)
                         }
                         .onChange(of: self.hideHiddenProxyGroups) { _ in
                             self.rootViewModel.updateFilteredProxyGroups(
                                 from: self.appSession.proxyGroups,
-                                hideHiddenGroups: self.hideHiddenProxyGroups)
+                                hideHiddenGroups: self.hideHiddenProxyGroups,
+                                mode: self.appSession.currentMode)
+                        }
+                        .onChange(of: self.appSession.currentMode) { _ in
+                            self.rootViewModel.updateFilteredProxyGroups(
+                                from: self.appSession.proxyGroups,
+                                hideHiddenGroups: self.hideHiddenProxyGroups,
+                                mode: self.appSession.currentMode)
                         }
     }
 

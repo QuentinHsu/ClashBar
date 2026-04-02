@@ -10,8 +10,17 @@ final class MenuBarRootViewModel: ObservableObject {
         self.currentTab = tab
     }
 
-    func updateFilteredProxyGroups(from groups: [ProxyGroup], hideHiddenGroups: Bool) {
-        let nextGroups = hideHiddenGroups ? groups.filter { $0.hidden != true } : groups
+    func updateFilteredProxyGroups(from groups: [ProxyGroup], hideHiddenGroups: Bool, mode: CoreMode) {
+        let modeFiltered: [ProxyGroup]
+        switch mode {
+        case .global:
+            modeFiltered = groups.filter { $0.name == "GLOBAL" }
+        case .direct:
+            modeFiltered = []
+        case .rule:
+            modeFiltered = groups
+        }
+        let nextGroups = hideHiddenGroups ? modeFiltered.filter { $0.hidden != true } : modeFiltered
         guard nextGroups != self.filteredProxyGroups else { return }
         self.filteredProxyGroups = nextGroups
     }
