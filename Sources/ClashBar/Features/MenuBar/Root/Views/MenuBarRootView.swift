@@ -96,6 +96,7 @@ struct MenuBarRootView: View {
     @State var modeAndTabSectionHeight: CGFloat = 0
     @State var footerBarHeight: CGFloat = 0
     @State var currentTabContentHeight: CGFloat = 0
+    @State var tabContentHeights: [RootTab: CGFloat] = [:]
     @AppStorage("clashbar.proxy.group.hide_hidden") var hideHiddenProxyGroups: Bool = true
     @AppStorage("clashbar.proxy.group.sort_nodes_by_latency") var sortGroupNodesByLatency: Bool = false
 
@@ -182,14 +183,14 @@ struct MenuBarRootView: View {
                 publishPreferredPanelHeight()
             }
             .onChange(of: self.rootViewModel.currentTab) { tab in
-                self.currentTabContentHeight = 0
+                self.currentTabContentHeight = self.tabContentHeights[tab] ?? 0
                 self.appSession.setActiveMenuTab(tab)
                 self.refreshDerivedData(for: tab)
             }
             .onChange(of: self.appSession.activeMenuTab) { tab in
                 guard self.rootViewModel.currentTab != tab else { return }
                 self.setCurrentTabWithoutAnimation(tab)
-                self.currentTabContentHeight = 0
+                self.currentTabContentHeight = self.tabContentHeights[tab] ?? 0
                 self.refreshDerivedData(for: tab)
             }
             .onChange(of: resolvedPanelHeight) { _ in
@@ -260,9 +261,9 @@ struct MenuBarRootView: View {
 
     func tabUsesDynamicHeight(_ tab: RootTab) -> Bool {
         switch tab {
-        case .proxy, .nodes, .system:
+        case .proxy, .nodes, .rules, .system:
             true
-        case .rules, .connections, .logs:
+        case .connections, .logs:
             false
         }
     }

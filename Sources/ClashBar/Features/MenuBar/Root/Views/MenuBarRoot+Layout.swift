@@ -63,6 +63,7 @@ extension MenuBarRootView {
         guard abs(self.currentTabContentHeight - normalized) > 0.5 else { return }
 
         self.currentTabContentHeight = normalized
+        self.tabContentHeights[tab] = normalized
     }
 
     func publishPreferredPanelHeight() {

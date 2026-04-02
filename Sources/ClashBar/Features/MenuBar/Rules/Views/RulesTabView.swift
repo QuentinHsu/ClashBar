@@ -69,6 +69,7 @@ extension MenuBarRootView {
                 }
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     func rulesStatChip(title: String, value: String) -> some View {
