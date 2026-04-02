@@ -422,6 +422,7 @@ final class AppSession: ObservableObject {
     let initialNoCoreSetupGuideShownKey = "catbar.core.install.guide.shown.v1"
     let bundlesMihomoCore: Bool
     var didPresentInitialNoCoreSetupGuide = false
+    var appUpdaterEventObserver: NSObjectProtocol?
 
     init(
         processManager: (any MihomoControlling)? = nil,
@@ -545,6 +546,7 @@ final class AppSession: ObservableObject {
         }
 
         self.updateNetworkReachabilityMonitoringState()
+        self.observeAppUpdaterEvents()
         self.refreshMenuBarDisplaySnapshotIfNeeded()
     }
 
@@ -578,5 +580,20 @@ final class AppSession: ObservableObject {
             return NSString(string: string).boolValue
         }
         return true
+    }
+
+    private func observeAppUpdaterEvents() {
+        guard self.appUpdaterEventObserver == nil else { return }
+
+        self.appUpdaterEventObserver = NotificationCenter.default.addObserver(
+            forName: .appUpdaterDidInitializeManually,
+            object: nil,
+            queue: .main)
+        { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.appendLog(level: "info", message: self.tr("log.app_update.framework_initialized_manual"))
+            }
+        }
     }
 }

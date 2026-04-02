@@ -4,32 +4,38 @@ import Sparkle
 
 @MainActor
 final class AppUpdater: NSObject, ObservableObject {
-    private let updaterController: SPUStandardUpdaterController?
+    private var updaterController: SPUStandardUpdaterController?
 
     override init() {
-        if Self.hasSecureUpdateConfiguration {
-            self.updaterController = SPUStandardUpdaterController(
-                startingUpdater: true,
-                updaterDelegate: nil,
-                userDriverDelegate: nil)
-        } else {
-            self.updaterController = nil
-        }
+        self.updaterController = nil
 
         super.init()
     }
 
     var isConfigured: Bool {
-        self.updaterController != nil
+        Self.hasSecureUpdateConfiguration
     }
 
     func checkForUpdates() {
-        if let updaterController {
-            updaterController.checkForUpdates(nil)
+        guard Self.hasSecureUpdateConfiguration else {
+            NSWorkspace.shared.open(AppReleaseConfiguration.releasesPageURL)
             return
         }
 
-        NSWorkspace.shared.open(AppReleaseConfiguration.releasesPageURL)
+        let isFirstManualInitialization = self.updaterController == nil
+        let updaterController = self.updaterController ?? SPUStandardUpdaterController(
+            startingUpdater: false,
+            updaterDelegate: nil,
+            userDriverDelegate: nil)
+        updaterController.updater.automaticallyChecksForUpdates = false
+        updaterController.updater.automaticallyDownloadsUpdates = false
+        self.updaterController = updaterController
+
+        if isFirstManualInitialization {
+            self.logManualUpdaterInitialization()
+        }
+
+        updaterController.checkForUpdates(nil)
     }
 
     func openReleasesPage() {
@@ -48,4 +54,16 @@ final class AppUpdater: NSObject, ObservableObject {
 
         return true
     }
+
+    private func logManualUpdaterInitialization() {
+        NotificationCenter.default.post(name: .appUpdaterDidInitializeManually, object: nil)
+
+        #if DEBUG
+            NSLog("[AppUpdater] Sparkle updater initialized lazily via manual check trigger.")
+        #endif
+    }
+}
+
+extension Notification.Name {
+    static let appUpdaterDidInitializeManually = Notification.Name("catbar.appUpdater.didInitializeManually")
 }

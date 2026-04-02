@@ -356,6 +356,7 @@
 "log.stream.disconnected" = "%@ WS disconnected: %@";
 "log.system_proxy.read_failed" = "Read system proxy status failed: %@";
 "log.launch_at_login.toggle_failed" = "Launch-at-login toggle failed: %@";
+"log.app_update.framework_initialized_manual" = "App update framework initialized via manual trigger.";
 "log.action.success" = "%@: success";
 "log.action.failed" = "%@: %@";
 "log.connection.copy_host" = "Copied connection host: %@";

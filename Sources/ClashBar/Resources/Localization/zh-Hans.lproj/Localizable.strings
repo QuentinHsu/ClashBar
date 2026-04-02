@@ -356,6 +356,7 @@
 "log.stream.disconnected" = "%@ WS 已断开: %@";
 "log.system_proxy.read_failed" = "读取系统代理状态失败: %@";
 "log.launch_at_login.toggle_failed" = "切换开机自启失败: %@";
+"log.app_update.framework_initialized_manual" = "已按手动触发初始化应用更新框架。";
 "log.action.success" = "%@: 成功";
 "log.action.failed" = "%@: %@";
 "log.connection.copy_host" = "已复制连接 Host：%@";
