@@ -27,7 +27,7 @@ struct DetermineDataAcquisitionPolicyUseCase {
         }
 
         let lowFrequencyInterval: UInt64 = switch input.activeTab {
-        case .proxy, .rules:
+        case .proxy, .nodes, .rules:
             input.foregroundLowFrequencyPrimaryTabsIntervalNanoseconds
         default:
             input.foregroundLowFrequencyOtherTabsIntervalNanoseconds

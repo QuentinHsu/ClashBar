@@ -1,4 +1,5 @@
 "ui.tab.proxy" = "Proxy";
+"ui.tab.nodes" = "Nodes";
 "ui.tab.rules" = "Rule";
 "ui.tab.connections" = "Connection";
 "ui.tab.logs" = "Log";
@@ -96,6 +97,8 @@
 
 "ui.section.proxy_providers" = "Proxy Providers";
 "ui.section.proxy_groups" = "Proxy Groups";
+"ui.section.remote_nodes" = "Remote Nodes";
+"ui.section.local_nodes" = "Local Nodes";
 "ui.section.basic_settings" = "Basic Settings";
 "ui.section.proxy_ports" = "Proxy Ports";
 "ui.section.maintenance" = "Maintenance";
@@ -108,6 +111,8 @@
 
 "ui.empty.proxy_providers" = "No proxy providers";
 "ui.empty.proxy_groups" = "No proxy groups loaded";
+"ui.empty.remote_nodes" = "No remote nodes";
+"ui.empty.local_nodes" = "No local nodes";
 "ui.empty.rules" = "No rules data";
 "ui.empty.connections" = "No active connections";
 "ui.empty.logs" = "No logs";

@@ -44,25 +44,30 @@ struct ClashBarApp: App {
                 }
                 .keyboardShortcut("1", modifiers: [.command, .option])
 
+                Button(self.tr("ui.tab.nodes")) {
+                    self.commandsViewModel.setActiveMenuTab(.nodes)
+                }
+                .keyboardShortcut("2", modifiers: [.command, .option])
+
                 Button(self.tr("ui.tab.rules")) {
                     self.commandsViewModel.setActiveMenuTab(.rules)
                 }
-                .keyboardShortcut("2", modifiers: [.command, .option])
+                .keyboardShortcut("3", modifiers: [.command, .option])
 
                 Button(self.tr("ui.tab.connections")) {
                     self.commandsViewModel.setActiveMenuTab(.connections)
                 }
-                .keyboardShortcut("3", modifiers: [.command, .option])
+                .keyboardShortcut("4", modifiers: [.command, .option])
 
                 Button(self.tr("ui.tab.logs")) {
                     self.commandsViewModel.setActiveMenuTab(.logs)
                 }
-                .keyboardShortcut("4", modifiers: [.command, .option])
+                .keyboardShortcut("5", modifiers: [.command, .option])
 
                 Button(self.tr("ui.tab.system")) {
                     self.commandsViewModel.setActiveMenuTab(.system)
                 }
-                .keyboardShortcut("5", modifiers: [.command, .option])
+                .keyboardShortcut("6", modifiers: [.command, .option])
 
                 Button(self.tr("ui.tab.system")) {
                     self.commandsViewModel.setActiveMenuTab(.system)

@@ -324,5 +324,12 @@ extension AppSession {
             try await operation()
             await self.refreshProvidersAndRules()
         }
+        // The core processes provider updates asynchronously; the initial
+        // refresh above may still return stale `updatedAt`. Schedule a
+        // deferred refresh so the UI picks up the real timestamp quickly.
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await self?.refreshProvidersAndRules()
+        }
     }
 }

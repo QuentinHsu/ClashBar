@@ -2,6 +2,7 @@ import SwiftUI
 
 enum RootTab: String, CaseIterable, Hashable {
     case proxy
+    case nodes
     case rules
     case connections
     case logs
@@ -10,6 +11,7 @@ enum RootTab: String, CaseIterable, Hashable {
     var titleKey: String {
         switch self {
         case .proxy: "ui.tab.proxy"
+        case .nodes: "ui.tab.nodes"
         case .rules: "ui.tab.rules"
         case .connections: "ui.tab.connections"
         case .logs: "ui.tab.logs"
@@ -20,6 +22,7 @@ enum RootTab: String, CaseIterable, Hashable {
     var symbolName: String {
         switch self {
         case .proxy: "square.grid.2x2.fill"
+        case .nodes: "server.rack"
         case .rules: "arrow.left.arrow.right"
         case .connections: "link"
         case .logs: "doc.fill"
@@ -85,6 +88,7 @@ struct MenuBarRootView: View {
     @State var copiedProxyCommandTarget: ProxyCommandCopyTarget?
     @State var proxyCommandCopyResetTask: Task<Void, Never>?
     @State var hoveredProviderName: String?
+    @State var hoveredLocalNodeName: String?
     @State var hoveredRuleIndex: Int?
     @State var hoveredMode: CoreMode?
     @State var hoveredTab: RootTab?
@@ -241,6 +245,8 @@ struct MenuBarRootView: View {
         switch tab {
         case .proxy:
             proxyTabBody
+        case .nodes:
+            nodesTabBody
         case .rules:
             rulesTabBody
         case .connections:
@@ -254,7 +260,7 @@ struct MenuBarRootView: View {
 
     func tabUsesDynamicHeight(_ tab: RootTab) -> Bool {
         switch tab {
-        case .proxy, .system:
+        case .proxy, .nodes, .system:
             true
         case .rules, .connections, .logs:
             false
@@ -301,6 +307,8 @@ struct MenuBarRootView: View {
         switch tab {
         case .proxy:
             Task { await self.appSession.refreshSystemProxyHelperRuntimeSnapshot() }
+            return
+        case .nodes:
             return
         case .system:
             return

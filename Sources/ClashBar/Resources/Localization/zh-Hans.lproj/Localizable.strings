@@ -1,4 +1,5 @@
 "ui.tab.proxy" = "代理";
+"ui.tab.nodes" = "节点";
 "ui.tab.rules" = "分流";
 "ui.tab.connections" = "连接";
 "ui.tab.logs" = "日志";
@@ -96,6 +97,8 @@
 
 "ui.section.proxy_providers" = "代理提供者";
 "ui.section.proxy_groups" = "代理组";
+"ui.section.remote_nodes" = "远程节点";
+"ui.section.local_nodes" = "本地节点";
 "ui.section.basic_settings" = "基础设置";
 "ui.section.proxy_ports" = "代理端口";
 "ui.section.maintenance" = "系统维护";
@@ -108,6 +111,8 @@
 
 "ui.empty.proxy_providers" = "暂无代理提供者";
 "ui.empty.proxy_groups" = "暂无代理组";
+"ui.empty.remote_nodes" = "暂无远程节点";
+"ui.empty.local_nodes" = "暂无本地节点";
 "ui.empty.rules" = "暂无规则数据";
 "ui.empty.connections" = "暂无活动连接";
 "ui.empty.logs" = "暂无日志";

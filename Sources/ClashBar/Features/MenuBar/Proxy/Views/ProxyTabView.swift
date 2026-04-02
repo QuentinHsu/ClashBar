@@ -120,9 +120,6 @@ extension MenuBarRootView {
     var proxyTabBody: some View {
         VStack(alignment: .leading, spacing: T.space6) {
             self.trafficOverview
-            if !appSession.sortedProxyProviderNames.isEmpty {
-                proxyProvidersSection
-            }
             proxyGroupsSection
         }
         .fixedSize(horizontal: false, vertical: true)

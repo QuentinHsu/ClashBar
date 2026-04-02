@@ -27,7 +27,7 @@ extension MenuBarRootView {
 
     func proxyProviderRow(name: String, detail: ProviderDetail?) -> some View {
         let nodeCount = detail?.proxies?.count ?? 0
-        let updatedText = ValueFormatter.relativeTime(from: detail?.updatedAt, language: language)
+        let updatedText = ValueFormatter.dateTimeFromISO(detail?.updatedAt)
         let expireSeconds = detail?.subscriptionInfo?.expire
         let expireText = ValueFormatter.daysUntilExpiryShort(from: expireSeconds, language: language)
         let expireColor: Color = expireSeconds == 0 ? nativeSecondaryLabel : nativeWarning
@@ -42,19 +42,13 @@ extension MenuBarRootView {
         let rowHorizontalPadding = T.space4
         let isUpdating = appSession.providerUpdating.contains(name)
         let hovered = hoveredProviderName == name
-        // Fixed width for update time — ensures vertical alignment across rows
-        let updateTimeWidth: CGFloat = 44
+        let updateTimeWidth: CGFloat = 120
 
         let hasSubscription = detail?.subscriptionInfo != nil
 
         return VStack(alignment: .leading, spacing: T.space6) {
-            // Row 1: icon | name + node badge | time (fixed) | refresh btn
+            // Row 1: name + node badge | time (fixed) | refresh btn
             HStack(alignment: .center, spacing: T.space6) {
-                Image(systemName: "externaldrive.fill")
-                    .font(.app(size: T.FontSize.caption, weight: .semibold))
-                    .foregroundStyle(nativeTeal.opacity(T.Opacity.solid))
-                    .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon)
-
                 HStack(alignment: .center, spacing: T.space4) {
                     HStack(alignment: .center, spacing: T.space4) {
                         Text(name)
@@ -130,8 +124,6 @@ extension MenuBarRootView {
                         .frame(height: T.space6)
                     }
                 }
-                .padding(.leading, T.rowLeadingIcon + T.space6)
-                .padding(.trailing, T.rowLeadingIcon + T.space6)
             }
         }
         .padding(.horizontal, rowHorizontalPadding)
@@ -385,18 +377,20 @@ extension MenuBarRootView {
 
     func nodesSectionHeader(
         _ title: String,
-        symbol: String,
+        symbol: String? = nil,
         count: String? = nil,
         @ViewBuilder trailing: () -> some View = { EmptyView() }) -> some View
     {
         HStack(spacing: T.space6) {
-            Image(systemName: symbol)
-                .font(.app(size: T.FontSize.caption, weight: .semibold))
-                .foregroundStyle(nativeTertiaryLabel)
-                .frame(
-                    width: T.rowLeadingIcon,
-                    height: T.rowLeadingIcon,
-                    alignment: .center)
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.app(size: T.FontSize.caption, weight: .semibold))
+                    .foregroundStyle(nativeTertiaryLabel)
+                    .frame(
+                        width: T.rowLeadingIcon,
+                        height: T.rowLeadingIcon,
+                        alignment: .center)
+            }
 
             Text(title)
                 .font(.app(size: T.FontSize.body, weight: .bold))
