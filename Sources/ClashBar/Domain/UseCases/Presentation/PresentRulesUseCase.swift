@@ -1,14 +1,31 @@
 import Foundation
 
 struct PresentRulesOutput {
-    let rules: [RuleItem]
+    let groups: [RulePolicyGroup]
     let providerLookup: [String: ProviderDetail]
 }
 
 struct PresentRulesUseCase {
     func execute(items: [RuleItem], providers: [String: ProviderDetail]) -> PresentRulesOutput {
-        PresentRulesOutput(
-            rules: Array(items.prefix(100)),
+        let truncated = items.prefix(100)
+
+        var order: [String] = []
+        var buckets: [String: [RuleItem]] = [:]
+
+        for rule in truncated {
+            let key = rule.proxy ?? ""
+            if buckets[key] == nil {
+                order.append(key)
+            }
+            buckets[key, default: []].append(rule)
+        }
+
+        let groups = order.map { key in
+            RulePolicyGroup(policy: key, rules: buckets[key] ?? [])
+        }
+
+        return PresentRulesOutput(
+            groups: groups,
             providerLookup: self.makeProviderLookup(from: providers))
     }
 

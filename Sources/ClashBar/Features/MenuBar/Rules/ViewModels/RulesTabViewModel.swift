@@ -5,7 +5,7 @@ import SwiftUI
 final class RulesTabViewModel: ObservableObject {
     private let presentRulesUseCase: PresentRulesUseCase
 
-    @Published private(set) var visibleRules: [RuleItem] = []
+    @Published private(set) var policyGroups: [RulePolicyGroup] = []
     @Published private(set) var providerLookup: [String: ProviderDetail] = [:]
 
     init(presentRulesUseCase: PresentRulesUseCase = PresentRulesUseCase()) {
@@ -14,11 +14,11 @@ final class RulesTabViewModel: ObservableObject {
 
     func updateVisibleRules(items: [RuleItem], providers: [String: ProviderDetail]) {
         let output = self.presentRulesUseCase.execute(items: items, providers: providers)
-        let nextRules = output.rules
+        let nextGroups = output.groups
         let nextLookup = output.providerLookup
 
-        if nextRules != self.visibleRules {
-            self.visibleRules = nextRules
+        if nextGroups != self.policyGroups {
+            self.policyGroups = nextGroups
         }
 
         guard nextLookup != self.providerLookup else { return }

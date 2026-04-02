@@ -90,6 +90,8 @@ struct MenuBarRootView: View {
     @State var hoveredProviderName: String?
     @State var hoveredLocalNodeName: String?
     @State var hoveredRuleIndex: Int?
+    @State var hoveredRuleGroup: String?
+    @State var expandedRuleGroups: Set<String> = []
     @State var hoveredMode: CoreMode?
     @State var hoveredTab: RootTab?
     @State var topHeaderHeight: CGFloat = 0

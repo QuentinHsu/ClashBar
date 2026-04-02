@@ -66,3 +66,10 @@ struct RuleItem: Decodable, Equatable, Identifiable {
         self.proxy = try container.decodeIfPresent(String.self, forKey: .proxy)
     }
 }
+
+struct RulePolicyGroup: Equatable, Identifiable {
+    let policy: String
+    let rules: [RuleItem]
+
+    var id: String { self.policy }
+}

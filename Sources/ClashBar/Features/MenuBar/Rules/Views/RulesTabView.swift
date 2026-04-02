@@ -1,70 +1,35 @@
 import SwiftUI
 
+// swiftlint:disable:next type_name
+private typealias T = MenuBarLayoutTokens
+
 extension MenuBarRootView {
     var rulesTabBody: some View {
-        let visibleRules = self.rulesViewModel.visibleRules
+        let groups = self.rulesViewModel.policyGroups
         let providerLookup = self.rulesViewModel.providerLookup
+
+        let totalConcreteCount = self.totalConcreteRuleCount(groups: groups, providerLookup: providerLookup)
 
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
-                HStack(spacing: MenuBarLayoutTokens.space8) {
-                    self.rulesStatChip(title: tr("ui.rule.stats.rules"), value: "\(appSession.rulesCount)")
-                    self.rulesStatChip(title: tr("ui.rule.stats.sets"), value: "\(appSession.providerRuleCount)")
-                }
+                self.rulesStatChip(title: tr("ui.rule.stats.rules"), value: "\(totalConcreteCount)")
 
                 Spacer(minLength: 0)
                 self.rulesRefreshButton
             }
-            .padding(.vertical, MenuBarLayoutTokens.space6)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(nativeSeparator)
-                    .frame(height: MenuBarLayoutTokens.stroke)
-            }
+            .padding(.vertical, T.space6)
 
-            HStack(spacing: 0) {
-                Color.clear.frame(width: 24)
-                Text(tr("ui.rules.column.target_type"))
-                    .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .medium))
-                    .foregroundStyle(nativeTertiaryLabel)
-                    .frame(width: 120, alignment: .leading)
-                    .padding(.trailing, MenuBarLayoutTokens.space6)
-                Text(tr("ui.rules.column.policy"))
-                    .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .medium))
-                    .foregroundStyle(nativeTertiaryLabel)
-                    .padding(.leading, MenuBarLayoutTokens.space6)
-                    .frame(width: 90, alignment: .leading)
-                Text(tr("ui.rules.column.stats"))
-                    .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .medium))
-                    .foregroundStyle(nativeTertiaryLabel)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            .textCase(.uppercase)
-            .padding(.horizontal, MenuBarLayoutTokens.space4)
-            .padding(.vertical, MenuBarLayoutTokens.space6)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(nativeSeparator)
-                    .frame(height: MenuBarLayoutTokens.stroke)
-            }
-
-            if visibleRules.isEmpty {
+            if groups.isEmpty {
                 Text(tr("ui.empty.rules"))
-                    .font(.app(size: MenuBarLayoutTokens.FontSize.body, weight: .regular))
+                    .font(.app(size: T.FontSize.body, weight: .regular))
                     .foregroundStyle(nativeSecondaryLabel)
-                    .padding(.horizontal, MenuBarLayoutTokens.space4)
-                    .padding(.vertical, MenuBarLayoutTokens.space8)
-                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
+                    .padding(.horizontal, T.space4)
+                    .padding(.vertical, T.space8)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(visibleRules.enumerated()), id: \.element.rowID) { index, rule in
-                        self.rulesRow(rule: rule, index: index, providerLookup: providerLookup)
-
-                        if index < visibleRules.count - 1 {
-                            Rectangle()
-                                .fill(nativeSeparator)
-                                .frame(height: MenuBarLayoutTokens.stroke)
-                        }
+                    ForEach(groups) { group in
+                        self.rulePolicyGroupSection(group: group, providerLookup: providerLookup)
                     }
                 }
             }
@@ -72,17 +37,72 @@ extension MenuBarRootView {
         .fixedSize(horizontal: false, vertical: true)
     }
 
+    private func rulePolicyGroupSection(
+        group: RulePolicyGroup,
+        providerLookup: [String: ProviderDetail]) -> some View
+    {
+        let isExpanded = expandedRuleGroups.contains(group.policy)
+        let policyText = group.policy.isEmpty ? tr("ui.common.na") : group.policy
+        let hovered = hoveredRuleGroup == group.policy
+        let concreteCount = self.concreteRuleCount(for: group, providerLookup: providerLookup)
+
+        return VStack(spacing: 0) {
+            Button {
+                if isExpanded {
+                    expandedRuleGroups.remove(group.policy)
+                } else {
+                    expandedRuleGroups.insert(group.policy)
+                }
+            } label: {
+                HStack(spacing: T.space4) {
+                    Image(systemName: "chevron.right")
+                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(nativeTertiaryLabel)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .frame(width: 14, alignment: .center)
+
+                    Text(policyText)
+                        .font(.app(size: T.FontSize.body, weight: .semibold))
+                        .foregroundStyle(nativePrimaryLabel)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+
+                    Text("\(concreteCount)")
+                        .font(.app(size: T.FontSize.caption, weight: .bold))
+                        .foregroundStyle(nativeSecondaryLabel)
+                        .frame(width: 32, alignment: .trailing)
+                }
+                .padding(.horizontal, T.space4)
+                .frame(height: T.rowHeight)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(nativeHoverRowBackground(hovered))
+            .onHover { hoveredRuleGroup = self.nextHovered(
+                current: hoveredRuleGroup, target: group.policy, isHovering: $0) }
+
+            if isExpanded {
+                VStack(spacing: 0) {
+                    ForEach(group.rules) { rule in
+                        self.rulesRow(rule: rule, providerLookup: providerLookup)
+                    }
+                }
+            }
+        }
+    }
+
     func rulesStatChip(title: String, value: String) -> some View {
-        HStack(spacing: MenuBarLayoutTokens.space4) {
+        HStack(spacing: T.space4) {
             Text(title.uppercased())
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
+                .font(.app(size: T.FontSize.caption, weight: .semibold))
                 .foregroundStyle(nativeTertiaryLabel)
             Text(value)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.body, weight: .bold))
+                .font(.app(size: T.FontSize.body, weight: .bold))
                 .foregroundStyle(nativePrimaryLabel)
         }
-        .padding(.horizontal, MenuBarLayoutTokens.space6)
-        .padding(.vertical, MenuBarLayoutTokens.space2)
+        .padding(.horizontal, T.space6)
+        .padding(.vertical, T.space2)
     }
 
     var rulesRefreshButton: some View {
@@ -98,93 +118,39 @@ extension MenuBarRootView {
         .opacity(appSession.isRuleProvidersRefreshing ? 0.6 : 1)
     }
 
-    func rulesRow(rule: RuleItem, index: Int, providerLookup: [String: ProviderDetail]) -> some View {
-        let hovered = hoveredRuleIndex == index
+    func rulesRow(rule: RuleItem, providerLookup: [String: ProviderDetail]) -> some View {
         let typeText = (rule.type.trimmedNonEmpty ?? tr("ui.common.na")).uppercased()
         let targetText = rule.payload.trimmedNonEmpty ?? tr("ui.common.na")
-        let policyText = rule.proxy.trimmedNonEmpty ?? tr("ui.common.na")
-        let iconSpec = self.ruleTypeIcon(for: typeText)
-        let badge = self.rulePolicyBadge(for: policyText)
         let stats = self.ruleStats(payload: targetText, providerLookup: providerLookup)
 
-        return HStack(spacing: 0) {
-            Image(systemName: iconSpec.symbol)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.subhead, weight: .medium))
-                .foregroundStyle(iconSpec.color)
-                .frame(width: 24, alignment: .leading)
+        return HStack(spacing: T.space4) {
+            Color.clear.frame(width: 14)
 
-            VStack(alignment: .leading, spacing: MenuBarLayoutTokens.space1) {
-                Text(targetText)
-                    .font(.app(size: MenuBarLayoutTokens.FontSize.body, weight: .medium))
-                    .foregroundStyle(nativePrimaryLabel)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Text(typeText)
-                    .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
-                    .foregroundStyle(nativeTertiaryLabel)
-                    .lineLimit(1)
-            }
-            .frame(width: 120, alignment: .leading)
-            .padding(.trailing, MenuBarLayoutTokens.space6)
+            Text(targetText)
+                .font(.app(size: T.FontSize.body, weight: .regular))
+                .foregroundStyle(nativePrimaryLabel)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: MenuBarLayoutTokens.space1) {
-                if let symbol = badge.symbol {
-                    Image(systemName: symbol)
-                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
-                        .foregroundStyle(badge.color)
-                }
-                Text(policyText)
-                    .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .medium))
-                    .foregroundStyle(badge.color)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .frame(width: 90, alignment: .leading)
+            Text(typeText)
+                .font(.app(size: T.FontSize.caption, weight: .regular))
+                .foregroundStyle(nativeTertiaryLabel)
+                .frame(width: 80, alignment: .leading)
 
-            VStack(alignment: .trailing, spacing: MenuBarLayoutTokens.space1) {
-                Text("\(stats.count)")
-                    .font(.app(size: MenuBarLayoutTokens.FontSize.body, weight: .regular))
-                    .foregroundStyle(stats.hasProvider ? nativeSecondaryLabel : nativeTertiaryLabel)
-                if let updatedText = stats.updatedText {
-                    Text(updatedText)
-                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
-                        .foregroundStyle(nativeTertiaryLabel)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-        .padding(.horizontal, MenuBarLayoutTokens.space4)
-        .frame(height: MenuBarLayoutTokens.rowHeight)
-        .background(nativeHoverRowBackground(hovered))
-        .onHover { hoveredRuleIndex = self.nextHovered(
-            current: hoveredRuleIndex, target: index, isHovering: $0) }
-    }
+            Text(stats.updatedText ?? "")
+                .font(.app(size: T.FontSize.caption, weight: .regular))
+                .foregroundStyle(nativeTertiaryLabel)
+                .lineLimit(1)
+                .frame(width: 36, alignment: .trailing)
 
-    func ruleTypeIcon(for type: String) -> (symbol: String, color: Color) {
-        let lower = type.lowercased()
-        if lower.contains("ipcidr") {
-            return ("globe.americas.fill", nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid))
+            Text(stats.hasProvider ? "\(stats.count)" : "")
+                .font(.app(size: T.FontSize.caption, weight: .regular))
+                .foregroundStyle(nativeSecondaryLabel)
+                .frame(width: 32, alignment: .trailing)
         }
-        if lower.contains("domain") || lower.contains("suffix") || lower.contains("keyword") {
-            return ("network", nativeTeal.opacity(MenuBarLayoutTokens.Opacity.solid))
-        }
-        if lower.contains("ruleset") {
-            return ("list.bullet.rectangle.fill", nativeWarning.opacity(MenuBarLayoutTokens.Opacity.solid))
-        }
-        return ("circle.grid.2x2.fill", nativeIndigo.opacity(MenuBarLayoutTokens.Opacity.solid))
-    }
-
-    func rulePolicyBadge(for policy: String) -> (symbol: String?, color: Color) {
-        let lower = policy.lowercased()
-        if lower.contains("fishy") {
-            return (
-                symbol: "exclamationmark.triangle.fill",
-                color: nativeAccent.opacity(MenuBarLayoutTokens.Opacity.solid))
-        }
-        return (
-            symbol: nil,
-            color: nativeSecondaryLabel)
+        .padding(.horizontal, T.space4)
+        .frame(height: T.rowHeight)
     }
 
     func ruleStats(
@@ -204,6 +170,23 @@ extension MenuBarRootView {
                 hasProvider: true)
         }
         return (count: 0, updatedText: nil, hasProvider: false)
+    }
+
+    private func concreteRuleCount(for group: RulePolicyGroup, providerLookup: [String: ProviderDetail]) -> Int {
+        var count = 0
+        for rule in group.rules {
+            let payload = rule.payload?.trimmed ?? ""
+            if let provider = providerLookup[payload.lowercased()], let rc = provider.ruleCount, rc > 0 {
+                count += rc
+            } else {
+                count += 1
+            }
+        }
+        return count
+    }
+
+    private func totalConcreteRuleCount(groups: [RulePolicyGroup], providerLookup: [String: ProviderDetail]) -> Int {
+        groups.reduce(0) { $0 + self.concreteRuleCount(for: $1, providerLookup: providerLookup) }
     }
 
     func refreshVisibleRules() {
