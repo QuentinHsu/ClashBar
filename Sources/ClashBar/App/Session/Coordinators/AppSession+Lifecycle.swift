@@ -19,10 +19,6 @@ extension AppSession {
         RestartCoreUseCase(coreRepository: self.coreRepository)
     }
 
-    private var clearSystemProxyBlockingUseCase: ClearSystemProxyBlockingUseCase {
-        ClearSystemProxyBlockingUseCase(repository: self.systemProxyRepository)
-    }
-
     private struct CoreBootstrapOptions {
         let overlaySyncingKey: String
         let providerTrigger: ProviderRefreshTrigger
@@ -209,21 +205,43 @@ extension AppSession {
         self.applyAppAppearance()
     }
 
+    /// Perform all cleanup asynchronously while the loading indicator is visible,
+    /// then terminate the app.  This avoids `terminate(nil)`'s nested run loop
+    /// (which prevents SwiftUI rendering) by doing all heavy work **before**
+    /// calling terminate.
     func quitApp() async {
-        self.prepareForTermination()
-        self.isPanelPresented = false
-        for window in NSApplication.shared.windows {
-            window.orderOut(nil)
-        }
+        guard !self.isQuittingApp else { return }
+        self.isQuittingApp = true
+
+        // Yield so SwiftUI commits the loading-indicator frame before we begin
+        // any blocking-capable work.  100 ms ≈ 6 display-refresh cycles at 60 Hz.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        await self.performTerminationCleanup()
+
+        // Cleanup is complete — terminate instantly.
+        // applicationShouldTerminate will see isQuittingApp == true and return
+        // .terminateNow, so terminate() won't block.
         NSApplication.shared.terminate(nil)
     }
 
-    func shutdownForTermination() {
+    /// Async cleanup shared by ``quitApp()`` and the Cmd-Q / system-quit path
+    /// in `applicationShouldTerminate(.terminateLater)`.
+    func performTerminationCleanup() async {
         self.prepareForTermination()
-        self.clearSystemProxyBlockingUseCase.execute(timeout: 2.0)
-        if coreRepository.isRunning {
-            self.stopCoreUseCase.executeImmediately()
+
+        if self.isSystemProxyEnabled {
+            try? await self.applySystemProxy(
+                enabled: false,
+                host: self.controllerHost(),
+                ports: .disabled)
         }
+
+        if coreRepository.isRunning {
+            await self.stopCoreUseCase.execute()
+        }
+
+        self.isPanelPresented = false
     }
 
     private func prepareForTermination() {

@@ -97,6 +97,7 @@ final class AppSession: ObservableObject {
     @Published var uiLanguage: AppLanguage = .zhHans
     @Published var appearanceMode: AppAppearanceMode = .system
     @Published var isPanelPresented: Bool = false
+    @Published var isQuittingApp: Bool = false
     @Published var activeMenuTab: RootTab = .proxy
     @Published var launchAtLoginEnabled: Bool = false
     @Published var launchAtLoginErrorMessage: String?

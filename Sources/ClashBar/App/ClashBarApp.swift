@@ -127,8 +127,23 @@ final class ClashBarAppDelegate: NSObject, NSApplicationDelegate {
         self.appSession.handleApplicationDidBecomeActive()
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // When quitApp() drives the exit, cleanup has already been performed
+        // asynchronously — terminate immediately.
+        if self.appSession.isQuittingApp {
+            return .terminateNow
+        }
+
+        // Cmd-Q / system-initiated quit — perform async cleanup first.
+        self.appSession.isQuittingApp = true
+        Task { @MainActor in
+            await self.appSession.performTerminationCleanup()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
-        self.appSession.shutdownForTermination()
         self.statusItemController?.shutdown()
         self.statusItemController = nil
     }
