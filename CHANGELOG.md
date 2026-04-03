@@ -1,3 +1,124 @@
+## v0.6.0
+
+> 本次更新修复了代理布局、列表显示及设置自动保存等多项体验问题，并在核心重启期间以灰色状态栏图标明确反馈运行状态，同时统一了系统代理图标风格，使整体交互更加稳定流畅。
+
+### ✨ 新增功能
+
+- **ui**：gray out status bar icon and speed display during core restart
+
+### 🚀 优化改进
+
+- **github**：standardize app name to CatBar in bug template
+- **guide**：optimize beginner guide and add mihomo template
+- **ui**：unify system proxy icon style and remove dynamic colors
+- **readme**：replace broken star history API with starchart.cc
+
+### 🐞 问题修复
+
+- **settings**：prevent auto-save triggering without actual content modification
+- **proxy**：fix layout truncation and incorrect height measurement
+- **ui**：prevent bottom clipping and missing scroll on long lists
+- **proxy**：optimize helper recovery and offline proxy toggling
+- **proxy**：force connection drop on network or proxy mode switch
+
+## v0.5.2
+
+> 本次更新完成了品牌重命名、优化了退出流程以彻底消除界面卡顿，并同步升级了 CI 依赖。
+
+### 🚀 优化改进
+
+- **actions**：bump versions for core github actions
+- **branding**：rename ClashBar to CatBar across codebase
+- **lifecycle**：completely refactor app termination to resolve UI freezing
+
+## v0.5.1
+
+> 本次更新优化了品牌视觉形象并重构了更新日志的生成方式，使项目呈现更加规范统一。
+
+### 🚀 优化改进
+
+- **release**：restructure changelog format and generation logic
+- **branding**：replace brand logo and optimize static images
+
+## v0.5.0
+
+> 本次更新优化了批量延迟测试的去重与分组逻辑，使代理测速结果更准确，同时简化了发布流程并升级了 Actions 运行环境，提升整体稳定性与维护效率。
+
+### ✨ 新增功能
+
+- **release**：simplify changelog generation and add Copilot summaries
+
+### 🚀 优化改进
+
+- **actions**：force JavaScript actions to run on Node 24
+- **proxy**：refactor batch latency testing with deduplication and per-group completion
+
+## v0.4.0
+
+> 本次更新重点覆盖 `menu-bar`、`remote`、`core`，主要补齐功能并修复关键问题。
+
+### ✨ 新增功能
+
+- **menu-bar**：move local network mode toggles into settings
+- **remote**：allow switching to offline sources and unify status colors
+- **core**：default releases to no-core packaging
+
+### 🐞 问题修复
+
+- **settings**：avoid spurious proxy port autosaves
+
+## v0.3.1
+
+> 本次更新重点覆盖 `menu-bar`，主要是一次体验与交互整理。
+
+### 🚀 优化改进
+
+- **menu-bar**：tighten source manager modal and stabilize source refresh
+
+## v0.3.0
+
+> 本次更新重点覆盖 `menu-bar`、`proxy`、`rules`，同时包含能力补齐、交互整理和稳定性修复。
+
+### ✨ 新增功能
+
+- **proxy**：show proxy command targets inline；support batch and single-node speed testing in proxy groups
+- **menu-bar**：add thin scroll indicator for tab content；move provider updates to context menus
+- **remote-machine**：support web panel entry for remote machines
+- **nodes**：add dedicated nodes tab for raw proxies management；add provider refresh actions and sync update time
+- **system**：add core restart and geo update actions；reorganize terminal proxy command actions
+- **rules**：support group-based remote ruleset updates
+- **update**：add Sparkle-based in-app updates
+- **release**：automate changelog updates for stable releases
+
+### 🚀 优化改进
+
+- **proxy**：remove proxy providers section from proxy tab；redesign traffic overview layout
+- **menu-bar**：cap list samples during panel height measurement；optimize rules and connections tab rendering；unify pinned header and optimize row rendering；move tun mode and proxy commands to system tab
+- **system**：reorganize system settings sections
+- **rules**：align rules tab naming
+- **formatter**：unify speed formatting logic and adjust display precision
+- **connections**：extract connection row into standalone Equatable view
+- **settings**：prevent redundant proxy port auto-saves；merge proxy ports into core settings
+- **session**：prevent redundant view updates on identical polling payloads
+- **ui**：remove redundant leading icons；unify core upgrade feedback and normalize version display
+
+### 🐞 问题修复
+
+- **proxy**：unify icon for latency test actions；resolve latency display for referenced proxy groups
+- **menu-bar**：restore source-aware state and panel behavior；adjust footer bar spacing；prevent blank flash on first rules/connections tab switch；rebuild rules tab and trim rules view pipeline；align collapse toggles on nodes and rules tabs
+- **remote-machine**：guard offline switching and improve proxy host copy；sync statusText on target switch for speed display
+- **nodes**：correct panel sizing after expanding remote providers
+- **system**：sync launch-at-login state after approval
+- **rules**：stabilize rule list item identifiers；show rule types in Clash-native format；unify rule type display formatting；align refresh icon with nodes tab
+- **release**：handle releases without Sparkle keys；pass Sparkle private key through stdin
+- **settings**：avoid autosave on system tab init
+- **ui**：remove source labels from settings
+- **popover**：stabilize menu bar panel height calculation
+- **status-bar**：reset first responder when opening panel
+- **package**：avoid reserved variable name in awk
+- **i18n**：normalize labels for mode and port settings
+- **providers**：correct provider update success handling
+
 ## v0.2.1
 
 ![macOS](https://img.shields.io/badge/macOS-Supported-000000?style=flat-square&logo=apple) ![Version](https://img.shields.io/badge/Release-v0.2.1-10B981?style=flat-square) ![Core](https://img.shields.io/badge/Core-Mihomo-6366f1?style=flat-square)
