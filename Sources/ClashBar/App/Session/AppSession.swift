@@ -202,8 +202,8 @@ final class AppSession: ObservableObject {
     var menuBarSpeedLines: MenuBarSpeedLines {
         guard self.isRuntimeRunning else { return .zero }
 
-        let up = self.compactMenuBarRate(max(0, self.traffic.up))
-        let down = self.compactMenuBarRate(max(0, self.traffic.down))
+        let up = ValueFormatter.speed(max(0, self.traffic.up)).replacingOccurrences(of: " ", with: "")
+        let down = ValueFormatter.speed(max(0, self.traffic.down)).replacingOccurrences(of: " ", with: "")
         return MenuBarSpeedLines(up: "\(up)↑", down: "\(down)↓")
     }
 
@@ -231,30 +231,7 @@ final class AppSession: ObservableObject {
         }
     }
 
-    func compactMenuBarRate(_ bytesPerSecond: Int64) -> String {
-        let normalizedBytes = max(0, bytesPerSecond)
-        if normalizedBytes == 0 {
-            return "0K"
-        }
 
-        var value = Double(normalizedBytes) / 1024
-        let units = ["K", "M", "G", "T"]
-        var unitIndex = 0
-
-        while value >= 1000, unitIndex < units.count - 1 {
-            value /= 1024
-            unitIndex += 1
-        }
-
-        let unit = units[unitIndex]
-        if value < 10 {
-            return String(format: "%.2f%@", value, unit)
-        } else if value < 100 {
-            return String(format: "%.1f%@", value, unit)
-        } else {
-            return String(format: "%.0f%@", min(value, 999), unit)
-        }
-    }
 
     func refreshMenuBarDisplaySnapshotIfNeeded() {
         let next = self.computedMenuBarDisplay

@@ -41,10 +41,16 @@ enum ValueFormatter {
 
     static func speed(_ value: Int64) -> String {
         let normalized = max(0, value)
-        if normalized >= 1024 * 1024 {
-            return String(format: "%.2f MB/s", Double(normalized) / (1024 * 1024))
+        let kb = Double(normalized) / 1024
+        if kb >= 1024 {
+            let mb = kb / 1024
+            if mb >= 1024 {
+                let gb = mb / 1024
+                return String(format: "%.2f GB/s", gb)
+            }
+            return String(format: "%.2f MB/s", mb)
         }
-        return String(format: "%.2f KB/s", Double(normalized) / 1024)
+        return String(format: "%.0f KB/s", kb)
     }
 
     static func bytesInteger(_ value: Int64) -> String {
@@ -75,27 +81,38 @@ enum ValueFormatter {
 
     static func bytesCompact(_ value: Int64) -> String {
         let normalized = max(0, value)
-        if normalized >= 1024 * 1024 * 1024 {
-            return String(format: "%.1f GB", Double(normalized) / (1024 * 1024 * 1024))
+        let kb = Double(normalized) / 1024
+        if kb >= 1024 {
+            let mb = kb / 1024
+            if mb >= 1024 {
+                let gb = mb / 1024
+                if gb >= 1024 {
+                    let tb = gb / 1024
+                    return String(format: "%.2f TB", tb)
+                }
+                return String(format: "%.2f GB", gb)
+            }
+            return String(format: "%.2f MB", mb)
         }
-        if normalized >= 1024 * 1024 {
-            return String(format: "%.1f MB", Double(normalized) / (1024 * 1024))
-        }
-        return String(format: "%.1f KB", Double(normalized) / 1024)
+        return String(format: "%.0f KB", kb)
     }
 
     static func bytesCompactNoSpace(_ value: Int64) -> String {
         let normalized = max(0, value)
-        if normalized >= 1024 * 1024 * 1024 * 1024 {
-            return self.compactNoSpace(value: Double(normalized) / (1024 * 1024 * 1024 * 1024), unit: "TB")
+        let kb = Double(normalized) / 1024
+        if kb >= 1024 {
+            let mb = kb / 1024
+            if mb >= 1024 {
+                let gb = mb / 1024
+                if gb >= 1024 {
+                    let tb = gb / 1024
+                    return String(format: "%.2fTB", tb)
+                }
+                return String(format: "%.2fGB", gb)
+            }
+            return String(format: "%.2fMB", mb)
         }
-        if normalized >= 1024 * 1024 * 1024 {
-            return self.compactNoSpace(value: Double(normalized) / (1024 * 1024 * 1024), unit: "GB")
-        }
-        if normalized >= 1024 * 1024 {
-            return self.compactNoSpace(value: Double(normalized) / (1024 * 1024), unit: "MB")
-        }
-        return self.compactNoSpace(value: Double(normalized) / 1024, unit: "KB")
+        return String(format: "%.0fKB", kb)
     }
 
     static func bytesOrDash(_ value: Int64?) -> String {

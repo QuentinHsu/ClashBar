@@ -140,7 +140,7 @@ struct MenuBarSpeedLines: Equatable {
     let up: String
     let down: String
 
-    static let zero = MenuBarSpeedLines(up: "0K↑", down: "0K↓")
+    static let zero = MenuBarSpeedLines(up: "0KB/s↑", down: "0KB/s↓")
 }
 
 struct MenuBarDisplay: Equatable {

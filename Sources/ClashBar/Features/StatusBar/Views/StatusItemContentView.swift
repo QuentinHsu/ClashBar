@@ -8,7 +8,7 @@ final class StatusItemContentView: NSView {
     private let symbolPointSize: CGFloat = 20
     private let iconTextSpacing: CGFloat = 0
     // Keep a small buffer so values like "12.3M↑" do not clip in the menu bar.
-    private let textContainerWidth: CGFloat = 38
+    private let textContainerWidth: CGFloat = 64
     private let textLineHeight: CGFloat = 11
 
     private let iconView: NSImageView = {
