@@ -442,13 +442,7 @@ extension MenuBarRootView {
     }
 
     var systemProxyScopeLabel: String? {
-        if self.appSession.isSystemProxyUsingRemoteCore {
-            return tr("ui.machine.remote_label")
-        }
-        if self.appSession.isRemoteTarget {
-            return tr("ui.machine.local_label")
-        }
-        return nil
+        nil
     }
 
     var shouldShowSystemProxyRemoteWarning: Bool {

@@ -50,6 +50,7 @@ private struct ConnectionsRefreshToken: Equatable {
     let keyword: String
     let transport: ConnectionsTransportFilter
     let sort: ConnectionsSortOption
+    let activeTargetID: UUID?
 }
 
 private struct LogsRefreshToken: Equatable {
@@ -214,7 +215,8 @@ struct MenuBarRootView: View {
                 connections: self.connectionsStore.connections,
                 keyword: self.connectionsViewModel.filterText,
                 transport: self.connectionsViewModel.transportFilter,
-                sort: self.connectionsViewModel.sortOption))
+                sort: self.connectionsViewModel.sortOption,
+                activeTargetID: self.remoteMachineStore.activeTargetID))
             { _ in
                 self.refreshConnectionsDerivedDataIfVisible()
             }

@@ -40,6 +40,10 @@ extension MenuBarRootView {
 
     var connectionsControlCard: some View {
         VStack(alignment: .leading, spacing: MenuBarLayoutTokens.space4) {
+            if !remoteMachineStore.machines.isEmpty {
+                self.connectionsSourceChips
+            }
+
             HStack(spacing: MenuBarLayoutTokens.space6) {
                 self.connectionsFilterMenu
                 self.connectionsSortMenu
@@ -67,6 +71,33 @@ extension MenuBarRootView {
                 .foregroundStyle(nativePrimaryLabel)
         }
         .menuRowPadding(vertical: MenuBarLayoutTokens.space4)
+    }
+
+    private var connectionsSourceChips: some View {
+        HStack(spacing: MenuBarLayoutTokens.space2) {
+            Image(systemName: "point.3.connected.trianglepath.dotted")
+                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
+                .foregroundStyle(nativeTertiaryLabel)
+
+            self.logFilterToggleButton(
+                title: tr("ui.network.source.local"),
+                selected: remoteMachineStore.activeTarget.isLocal,
+                action: {
+                    guard !remoteMachineStore.activeTarget.isLocal else { return }
+                    Task { await appSession.switchToMachineTarget(.local) }
+                })
+
+            ForEach(remoteMachineStore.machines) { machine in
+                self.logFilterToggleButton(
+                    title: machine.name,
+                    selected: remoteMachineStore.activeTargetID == machine.id,
+                    action: {
+                        guard remoteMachineStore.activeTargetID != machine.id else { return }
+                        Task { await appSession.switchToMachineTarget(.remote(machine)) }
+                    })
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     var connectionsFilterMenu: some View {

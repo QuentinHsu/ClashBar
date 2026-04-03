@@ -121,6 +121,7 @@
 "ui.placeholder.search_logs" = "Search logs...";
 "ui.placeholder.port" = "0";
 
+"ui.network.source.local" = "Local";
 "ui.network.filter.transport" = "Transport Filter";
 "ui.network.filter.transport.all" = "All Protocols";
 "ui.network.filter.transport.tcp" = "TCP Only";

@@ -404,11 +404,11 @@ extension MenuBarRootView {
 
             VStack(spacing: 0) {
                 self.settingsCardHeader(
-                    isRemote ? tr("ui.section.local_app_settings") : tr("ui.section.basic_settings"),
+                    tr("ui.section.basic_settings"),
                     symbol: "slider.horizontal.3")
                 ForEach(localOnlyItems, id: \.id) { item in
                     self.settingsToggleRow(
-                        isRemote ? "\(item.title) (\(tr("ui.machine.local_label")))" : item.title,
+                        item.title,
                         symbol: item.symbol,
                         isOn: item.isOn)
                 }
@@ -450,7 +450,7 @@ extension MenuBarRootView {
 
             VStack(spacing: 0) {
                 self.settingsCardHeader(
-                    isRemote ? tr("ui.section.core_settings_remote") : tr("ui.section.core_settings"),
+                    tr("ui.section.core_settings"),
                     symbol: "gearshape.2")
                 ForEach(coreToggleItems, id: \.id) { item in
                     self.settingsToggleRow(

@@ -121,6 +121,7 @@
 "ui.placeholder.search_logs" = "搜索日志...";
 "ui.placeholder.port" = "0";
 
+"ui.network.source.local" = "本机";
 "ui.network.filter.transport" = "网络类型过滤";
 "ui.network.filter.transport.all" = "全部协议";
 "ui.network.filter.transport.tcp" = "仅 TCP";

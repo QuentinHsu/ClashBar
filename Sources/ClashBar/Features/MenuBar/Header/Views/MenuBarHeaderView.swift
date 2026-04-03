@@ -128,9 +128,8 @@ extension MenuBarRootView {
                 .contentShape(Rectangle())
             },
             content: { dismiss in
-                self.headerPopoverSection(self.tr("ui.machine.local_label"))
                 AttachedPopoverMenuItem(
-                    title: tr("ui.machine.return_local"),
+                    title: tr("ui.machine.local"),
                     selected: remoteMachineStore.activeTarget.isLocal)
                 {
                     dismiss()
@@ -140,11 +139,6 @@ extension MenuBarRootView {
                         await appSession.switchToMachineTarget(.local)
                         isSwitchingMachine = false
                     }
-                }
-
-                if !remoteMachineStore.machines.isEmpty {
-                    AttachedPopoverMenuDivider()
-                    self.headerPopoverSection(self.tr("ui.machine.manage"))
                 }
 
                 ForEach(remoteMachineStore.machines) { machine in
@@ -196,7 +190,7 @@ extension MenuBarRootView {
     }
 
     var headerConnectionDisplayText: String {
-        appSession.externalControllerDisplay
+        self.machineSwitcherLabel
     }
 
     var headerConnectionStatusTint: Color {
