@@ -63,7 +63,7 @@ extension MenuBarRootView {
             if logs.isEmpty {
                 emptyCard(tr("ui.empty.logs"))
             } else {
-                MeasurementAwareVStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     SeparatedForEach(data: logs, id: \.id, separator: nativeSeparator) { log in
                         self.logEntryRow(log)
                             .padding(.horizontal, T.space4)

@@ -5,7 +5,7 @@ private typealias T = MenuBarLayoutTokens
 
 extension MenuBarRootView {
     var nodesTabBody: some View {
-        MeasurementAwareVStack(alignment: .leading, spacing: T.space6) {
+        VStack(alignment: .leading, spacing: T.space6) {
             self.nodesSearchBar
             self.remoteNodesSection
             self.nodesLocalSection()
@@ -48,7 +48,7 @@ extension MenuBarRootView {
     private var remoteNodesSection: some View {
         let providers = appSession.sortedProxyProviderNames
 
-        return MeasurementAwareVStack(alignment: .leading, spacing: T.space6) {
+        return VStack(alignment: .leading, spacing: T.space6) {
             self.nodesSectionHeader(
                 tr("ui.section.remote_nodes"),
                 count: "\(providers.count)")
@@ -59,7 +59,7 @@ extension MenuBarRootView {
             if providers.isEmpty {
                 emptyCard(tr("ui.empty.remote_nodes"))
             } else {
-                MeasurementAwareVStack(alignment: .leading, spacing: T.space2) {
+                VStack(alignment: .leading, spacing: T.space2) {
                     ForEach(providers, id: \.self) { name in
                         self.nodesProviderBlock(name: name, detail: appSession.proxyProvidersDetail[name])
                     }
@@ -69,117 +69,187 @@ extension MenuBarRootView {
     }
 
     private func nodesProviderBlock(name: String, detail: ProviderDetail?) -> some View {
-        let isExpanded = nodesViewModel.expandedProviders.contains(name)
         let nodeCount = detail?.proxies?.count ?? 0
         let isUpdating = appSession.providerUpdating.contains(name)
         let updatedText = ValueFormatter.dateTimeFromISO(detail?.updatedAt)
+        let expireSeconds = detail?.subscriptionInfo?.expire
+        let expireText = ValueFormatter.daysUntilExpiryShort(from: expireSeconds, language: language)
+        let expireColor: Color = expireSeconds == 0 ? nativeSecondaryLabel : nativeWarning
+        let upload = detail?.subscriptionInfo?.upload
+        let download = detail?.subscriptionInfo?.download
+        let total = detail?.subscriptionInfo?.total
+        let hasSubscription = detail?.subscriptionInfo != nil
+        let usedRatio: Double? = {
+            guard let total, total > 0, let upload, let download else { return nil }
+            let used = upload + download
+            return min(max(Double(used) / Double(total), 0), 1)
+        }()
 
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: T.space4) {
-                Button {
-                    withAnimation(.snappy(duration: 0.18)) {
-                        nodesViewModel.toggleProvider(name)
+        return AttachedPopoverMenu { isHovered in
+            VStack(alignment: .leading, spacing: hasSubscription ? T.space4 : 0) {
+                HStack(alignment: .center, spacing: T.space6) {
+                    Text(name)
+                        .font(.app(size: T.FontSize.body, weight: .semibold))
+                        .foregroundStyle(nativePrimaryLabel)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+
+                    Text("\(nodeCount)")
+                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(nativeSecondaryLabel)
+                        .padding(.horizontal, T.space4)
+                        .padding(.vertical, T.space1)
+                        .background(nativeBadgeCapsule())
+
+                    Text(updatedText)
+                        .font(.app(size: T.FontSize.caption, weight: .regular))
+                        .foregroundStyle(nativeTertiaryLabel)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .layoutPriority(2)
+
+                    Spacer(minLength: T.space4)
+
+                    self.providerActionButton(.refresh, isLoading: isUpdating) {
+                        await appSession.updateProxyProvider(name: name)
                     }
-                } label: {
-                    HStack(spacing: T.space6) {
-                        Text(name)
-                            .font(.app(size: T.FontSize.body, weight: .semibold))
-                            .foregroundStyle(nativePrimaryLabel)
-                            .lineLimit(1)
+                    .frame(width: 18, alignment: .center)
 
-                        Text("\(nodeCount)")
-                            .font(.app(size: T.FontSize.caption, weight: .semibold))
-                            .foregroundStyle(nativeSecondaryLabel)
-                            .padding(.horizontal, T.space4)
-                            .padding(.vertical, T.space1)
-                            .background(nativeBadgeCapsule())
-
-                        Spacer(minLength: 0)
-
-                        Text(updatedText)
-                            .font(.app(size: T.FontSize.caption, weight: .regular))
-                            .foregroundStyle(nativeTertiaryLabel)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                Group {
-                    if isUpdating {
-                        ProgressView()
-                            .controlSize(.mini)
-                    } else {
-                        Color.clear
-                    }
-                }
-                .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon)
-
-                Button {
-                    withAnimation(.snappy(duration: 0.18)) {
-                        nodesViewModel.toggleProvider(name)
-                    }
-                } label: {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: "chevron.right")
                         .font(.app(size: T.FontSize.caption, weight: .semibold))
                         .foregroundStyle(nativeTertiaryLabel)
-                        .frame(width: T.rowLeadingIcon, alignment: .trailing)
-                        .contentShape(Rectangle())
+                        .frame(width: T.space8, alignment: .trailing)
                 }
-                .buttonStyle(.plain)
+
+                if hasSubscription {
+                    VStack(alignment: .leading, spacing: T.space2) {
+                        HStack(spacing: 0) {
+                            Text(expireText)
+                                .font(.app(size: T.FontSize.caption, weight: .regular))
+                                .foregroundStyle(expireColor)
+
+                            Spacer(minLength: T.space4)
+
+                            if let upload, let download, let total {
+                                let used = upload + download
+                                let quotaText =
+                                    "\(ValueFormatter.bytesCompactNoSpace(used)) / " +
+                                    "\(ValueFormatter.bytesCompactNoSpace(total))"
+                                Text(quotaText)
+                                    .font(.app(size: T.FontSize.caption, weight: .regular))
+                                    .foregroundStyle(nativeSecondaryLabel)
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        if let usedRatio {
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(nativeControlFill.opacity(T.Opacity.solid))
+                                    Capsule()
+                                        .fill(
+                                            (usedRatio >= 0.9
+                                                ? nativeCritical
+                                                : usedRatio >= 0.75 ? nativeWarning : nativeAccent
+                                            ).opacity(T.Opacity.solid))
+                                        .frame(width: geo.size.width * usedRatio)
+                                }
+                            }
+                            .frame(height: T.space6)
+                        }
+                    }
+                }
             }
             .padding(.horizontal, T.space4)
             .padding(.vertical, T.space6)
-            .contentShape(Rectangle())
-            .contextMenu {
-                Button(tr("ui.action.refresh")) {
-                    Task { await appSession.updateProxyProvider(name: name) }
+            .background(nativeHoverRowBackground(isHovered))
+        } content: { _ in
+            self.popoverHeader(name: name, count: nodeCount) {
+                EmptyView()
+            } trailing: {
+                self.providerActionButton(.refresh, isLoading: isUpdating) {
+                    await appSession.updateProxyProvider(name: name)
                 }
+                .frame(width: 18, alignment: .center)
             }
 
-            if isExpanded {
-                self.nodesProviderExpandedContent(providerName: name, detail: detail)
+            if hasSubscription {
+                VStack(alignment: .leading, spacing: T.space2) {
+                    HStack(spacing: T.space4) {
+                        Text(expireText)
+                            .font(.app(size: T.FontSize.caption, weight: .regular))
+                            .foregroundStyle(expireColor)
+
+                        Spacer(minLength: 0)
+
+                        if let upload, let download, let total {
+                            let used = upload + download
+                            Text(
+                                "\(ValueFormatter.bytesCompactNoSpace(used)) / " +
+                                "\(ValueFormatter.bytesCompactNoSpace(total))"
+                            )
+                            .font(.app(size: T.FontSize.caption, weight: .regular))
+                            .foregroundStyle(nativeSecondaryLabel)
+                            .lineLimit(1)
+                        }
+                    }
+
+                    if let usedRatio {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(nativeControlFill.opacity(T.Opacity.solid))
+                                Capsule()
+                                    .fill(
+                                        (usedRatio >= 0.9
+                                            ? nativeCritical
+                                            : usedRatio >= 0.75 ? nativeWarning : nativeAccent
+                                        ).opacity(T.Opacity.solid))
+                                    .frame(width: geo.size.width * usedRatio)
+                            }
+                        }
+                        .frame(height: T.space6)
+                    }
+                }
+                .padding(.horizontal, T.space4)
+                .padding(.bottom, T.space2)
+            }
+
+            self.nodesProviderExpandedContent(detail: detail)
+        }
+        .contextMenu {
+            Button(tr("ui.action.refresh")) {
+                Task { await appSession.updateProxyProvider(name: name) }
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: T.cornerRadius, style: .continuous)
-                .fill(nativeControlFill.opacity(isDarkAppearance ? 0.24 : 0.18)))
     }
 
-    private func nodesProviderExpandedContent(providerName: String, detail: ProviderDetail?) -> some View {
+    private func nodesProviderExpandedContent(detail: ProviderDetail?) -> some View {
         let allNodes = detail?.proxies ?? []
         let filtered = nodesViewModel.filteredProviderNodes(allNodes, searchText: nodesViewModel.searchText)
 
-        return VStack(spacing: 0) {
-            Divider()
-                .overlay(nativeSeparator)
-                .padding(.horizontal, T.space4)
-
-            if filtered.isEmpty {
+        if filtered.isEmpty {
+            return AnyView(
                 Text(nodesViewModel.searchText.isEmpty ? tr("ui.common.na") : tr("ui.nodes.no_match"))
                     .font(.app(size: T.FontSize.caption, weight: .regular))
                     .foregroundStyle(nativeSecondaryLabel)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, T.space6)
                     .padding(.vertical, T.space4)
-            } else {
-                MeasurementAwareVStack(alignment: .leading, spacing: 0) {
-                    ForEach(filtered, id: \.stableIdentity) { node in
-                        self.nodesProviderNodeRow(
-                            providerName: providerName,
-                            node: node,
-                            testUrl: detail?.testUrl,
-                            timeout: detail?.timeout)
-                    }
-                }
-                .padding(.vertical, T.space2)
-            }
+            )
         }
+
+        return AnyView(
+            VStack(spacing: 0) {
+                ForEach(filtered, id: \.stableIdentity) { node in
+                    self.nodesProviderNodeRow(
+                        node: node,
+                        testUrl: detail?.testUrl,
+                        timeout: detail?.timeout)
+                }
+            }
+        )
     }
 
     private func nodesProviderNodeRow(
-        providerName _: String,
         node: ProviderProxyNode,
         testUrl: String?,
         timeout: Int?) -> some View
@@ -208,7 +278,7 @@ extension MenuBarRootView {
             proxyProvidersDetail: appSession.proxyProvidersDetail)
         let filtered = nodesViewModel.filteredLocalNodes(allLocal, searchText: nodesViewModel.searchText)
 
-        return MeasurementAwareVStack(alignment: .leading, spacing: T.space6) {
+        return VStack(alignment: .leading, spacing: T.space6) {
             self.nodesSectionHeader(
                 tr("ui.section.local_nodes"),
                 count: "\(filtered.count)")
@@ -219,7 +289,7 @@ extension MenuBarRootView {
                         ? tr("ui.empty.local_nodes")
                         : tr("ui.nodes.no_match"))
             } else {
-                MeasurementAwareVStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(filtered, id: \.stableIdentity) { node in
                         self.nodesLocalNodeRow(node)
                     }

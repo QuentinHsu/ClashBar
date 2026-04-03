@@ -4,7 +4,6 @@ import SwiftUI
 @MainActor
 final class NodesTabViewModel: ObservableObject {
     @Published var nodeTestingInProgress: Set<String> = []
-    @Published var expandedProviders: Set<String> = []
     @Published var searchText: String = ""
 
     struct LocalNode: Equatable, Hashable {
@@ -17,14 +16,6 @@ final class NodesTabViewModel: ObservableObject {
                 return id
             }
             return self.name
-        }
-    }
-
-    func toggleProvider(_ name: String) {
-        if self.expandedProviders.contains(name) {
-            self.expandedProviders.remove(name)
-        } else {
-            self.expandedProviders.insert(name)
         }
     }
 

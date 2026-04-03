@@ -30,7 +30,7 @@ extension MenuBarRootView {
         if connections.isEmpty {
             emptyCard(tr("ui.empty.connections"))
         } else {
-            MeasurementAwareVStack(spacing: 0) {
+            VStack(spacing: 0) {
                 ForEach(connections, id: \.id) { conn in
                     self.connectionRow(conn)
                 }

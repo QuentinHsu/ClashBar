@@ -1,6 +1,23 @@
 import SwiftUI
 
 extension MenuBarRootView {
+    private var preferredStaticTabScrollAreaHeight: CGFloat? {
+        switch self.rootViewModel.currentTab {
+        case .connections:
+            360
+        case .logs:
+            360
+        default:
+            nil
+        }
+    }
+
+    private var cachedCurrentTabContentHeight: CGFloat? {
+        let cached = self.tabContentHeights[self.rootViewModel.currentTab] ?? 0
+        guard cached > 0 else { return nil }
+        return cached
+    }
+
     private var hasMeasuredFixedSections: Bool {
         topHeaderHeight > 0 && modeAndTabSectionHeight > 0 && footerBarHeight > 0
     }
@@ -13,8 +30,22 @@ extension MenuBarRootView {
         topHeaderHeight + modeAndTabSectionHeight + footerBarHeight + connectionsControlHeight
     }
 
+    private var unresolvedTargetPanelHeight: CGFloat {
+        if let cachedCurrentTabContentHeight {
+            return min(
+                self.fixedSectionHeight + cachedCurrentTabContentHeight,
+                popoverLayoutModel.maxPanelHeight)
+        }
+
+        let minimumPanelHeight = min(popoverLayoutModel.minPanelHeight, popoverLayoutModel.maxPanelHeight)
+        let preferredStaticHeight = self.preferredStaticTabScrollAreaHeight.map { self.fixedSectionHeight + $0 } ?? 0
+        return min(
+            popoverLayoutModel.maxPanelHeight,
+            max(minimumPanelHeight, max(self.fixedSectionHeight + 1, preferredStaticHeight)))
+    }
+
     private var fallbackTabScrollAreaHeight: CGFloat {
-        max(0, popoverLayoutModel.resolvedPanelHeight - self.fixedSectionHeight)
+        max(0, self.unresolvedTargetPanelHeight - self.fixedSectionHeight)
     }
 
     private var availableTabScrollAreaHeight: CGFloat {
@@ -27,7 +58,7 @@ extension MenuBarRootView {
     }
 
     var resolvedPanelHeight: CGFloat {
-        guard self.hasResolvedCurrentTabLayout else { return popoverLayoutModel.resolvedPanelHeight }
+        guard self.hasResolvedCurrentTabLayout else { return self.unresolvedTargetPanelHeight }
         return max(1, min(self.fixedSectionHeight + self.tabScrollAreaHeight, popoverLayoutModel.maxPanelHeight))
     }
 
