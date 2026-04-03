@@ -10,7 +10,7 @@ extension MenuBarRootView {
     }
 
     private var fixedSectionHeight: CGFloat {
-        topHeaderHeight + modeAndTabSectionHeight + footerBarHeight
+        topHeaderHeight + modeAndTabSectionHeight + footerBarHeight + connectionsControlHeight
     }
 
     private var fallbackTabScrollAreaHeight: CGFloat {
@@ -34,6 +34,7 @@ extension MenuBarRootView {
     enum SectionHeightTarget {
         case header
         case modeAndTab
+        case connectionsControl
         case footer
     }
 
@@ -48,6 +49,10 @@ extension MenuBarRootView {
         case .modeAndTab:
             if abs(modeAndTabSectionHeight - normalized) > 0.5 {
                 modeAndTabSectionHeight = normalized
+            }
+        case .connectionsControl:
+            if abs(connectionsControlHeight - normalized) > 0.5 {
+                connectionsControlHeight = normalized
             }
         case .footer:
             if abs(footerBarHeight - normalized) > 0.5 {

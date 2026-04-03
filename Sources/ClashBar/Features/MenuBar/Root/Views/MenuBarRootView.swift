@@ -97,6 +97,7 @@ struct MenuBarRootView: View {
     @State var topHeaderHeight: CGFloat = 0
     @State var modeAndTabSectionHeight: CGFloat = 0
     @State var footerBarHeight: CGFloat = 0
+    @State var connectionsControlHeight: CGFloat = 0
     @State var currentTabContentHeight: CGFloat = 0
     @State var tabContentHeights: [RootTab: CGFloat] = [:]
     @AppStorage("clashbar.proxy.group.hide_hidden") var hideHiddenProxyGroups: Bool = true
@@ -157,6 +158,12 @@ struct MenuBarRootView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(height: tabScrollAreaHeight, alignment: .top)
 
+            if self.rootViewModel.currentTab == .connections {
+                self.connectionsControlCard
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .reportHeight { updateSectionHeight($0, target: .connectionsControl) }
+            }
+
             footerBar
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .reportHeight { updateSectionHeight($0, target: .footer) }
@@ -186,6 +193,7 @@ struct MenuBarRootView: View {
             }
             .onChange(of: self.rootViewModel.currentTab) { tab in
                 self.currentTabContentHeight = self.tabContentHeights[tab] ?? 0
+                if tab != .connections { self.connectionsControlHeight = 0 }
                 self.appSession.setActiveMenuTab(tab)
                 self.refreshDerivedData(for: tab)
             }
@@ -193,6 +201,7 @@ struct MenuBarRootView: View {
                 guard self.rootViewModel.currentTab != tab else { return }
                 self.setCurrentTabWithoutAnimation(tab)
                 self.currentTabContentHeight = self.tabContentHeights[tab] ?? 0
+                if tab != .connections { self.connectionsControlHeight = 0 }
                 self.refreshDerivedData(for: tab)
             }
             .onChange(of: resolvedPanelHeight) { _ in

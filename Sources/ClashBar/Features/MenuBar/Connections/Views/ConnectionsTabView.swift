@@ -23,19 +23,16 @@ extension MenuBarRootView {
 
     private static var textWidthCache: [String: CGFloat] = [:]
 
+    @ViewBuilder
     var connectionsTabBody: some View {
         let connections = self.connectionsViewModel.visibleConnections
 
-        return VStack(alignment: .leading, spacing: MenuBarLayoutTokens.space6) {
-            self.connectionsControlCard
-
-            if connections.isEmpty {
-                emptyCard(tr("ui.empty.connections"))
-            } else {
-                MeasurementAwareVStack(spacing: 0) {
-                    SeparatedForEach(data: connections, id: \.id, separator: nativeSeparator) { conn in
-                        self.connectionRow(conn)
-                    }
+        if connections.isEmpty {
+            emptyCard(tr("ui.empty.connections"))
+        } else {
+            MeasurementAwareVStack(spacing: 0) {
+                SeparatedForEach(data: connections, id: \.id, separator: nativeSeparator) { conn in
+                    self.connectionRow(conn)
                 }
             }
         }
