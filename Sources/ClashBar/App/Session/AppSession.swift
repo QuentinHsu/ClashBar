@@ -492,9 +492,15 @@ final class AppSession: ObservableObject {
         restoreLastSuccessfulConfigIfAvailable()
         self.remoteConfigSources = loadPersistedRemoteConfigSources()
         pruneRemoteConfigSourcesIfNeeded()
-        // Always start in local mode. Remote target is session-level only.
-        self.remoteMachineStore.resetActiveTarget()
-        self.controllerUIURL = makeControllerUIURL(self.controller)
+        // Restore persisted remote target if available; otherwise stay local.
+        if case let .remote(machine) = self.remoteMachineStore.activeTarget {
+            self.controller = machine.controllerAddress
+            self.controllerSecret = machine.secret
+            self.externalControllerDisplay = machine.displayAddress
+            self.controllerUIURL = makeControllerUIURL(machine.controllerAddress)
+        } else {
+            self.controllerUIURL = makeControllerUIURL(self.controller)
+        }
         if let persisted = loadPersistedEditableSettingsSnapshot() {
             applyEditableSettingsSnapshotToUI(persisted)
             self.preserveLocalSettingsOnNextSync = true
@@ -503,6 +509,30 @@ final class AppSession: ObservableObject {
 
         if startBackgroundRefresh {
             Task {
+                // If a remote target was restored, verify connectivity first.
+                // Fall back to local silently if the remote is unreachable.
+                if case let .remote(machine) = self.remoteMachineStore.activeTarget {
+                    let status = await self.remoteMachineStore.refreshConnectivity(for: machine)
+                    if !status.isConnected {
+                        self.remoteMachineStore.selectTarget(.local)
+                        if let configPath = await self.resolveSelectedConfigPath() {
+                            self.applyExternalControllerFromSelectedConfigFile(configPath: configPath)
+                        } else {
+                            let fallback = "127.0.0.1:9090"
+                            self.controller = fallback
+                            self.controllerSecret = nil
+                            self.externalControllerDisplay = fallback
+                            self.localExternalControllerDisplay = fallback
+                            self.controllerUIURL = self.makeControllerUIURL(fallback)
+                            self.ensureAPIClient()
+                        }
+                        self.appendLog(level: "warning", message: self.tr(
+                            "log.remote.restore_failed", machine.name))
+                    } else {
+                        self.ensureAPIClient()
+                        self.statusText = "Running"
+                    }
+                }
                 await refreshFromAPI(includeSlowCalls: true)
                 await applyPendingAppLaunchSettingsOverlayIfNeeded()
                 self.seedCoreFeatureRecoveryFromPersistedQuitState()

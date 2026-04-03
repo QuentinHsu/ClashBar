@@ -349,6 +349,7 @@
 "log.logs.copied_entry" = "Copied full log entry";
 "log.remote.switched_to_local" = "Switched to local machine";
 "log.remote.switched_to_remote" = "Switched to remote machine: %@ (%@)";
+"log.remote.restore_failed" = "Failed to restore remote target %@, falling back to local";
 
 "log.action_name.reload_config" = "Reload config";
 "log.action_name.switch_proxy" = "Switch proxy %@ -> %@";

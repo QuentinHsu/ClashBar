@@ -349,6 +349,7 @@
 "log.logs.copied_entry" = "已复制完整日志";
 "log.remote.switched_to_local" = "已切换到本地机器";
 "log.remote.switched_to_remote" = "已切换到远程机器: %@ (%@)";
+"log.remote.restore_failed" = "恢复远程来源 %@ 失败，已回退到本地";
 
 "log.action_name.reload_config" = "重载配置";
 "log.action_name.switch_proxy" = "切换代理 %@ -> %@";
