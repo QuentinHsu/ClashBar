@@ -168,6 +168,9 @@
 
 "ui.footer.core_mihomo" = "MIHOMO %@";
 "ui.footer.version" = "v%@";
+"ui.footer.version_check_help" = "Check for CatBar updates";
+"ui.footer.version_check_running" = "Checking for CatBar updates";
+"ui.footer.version_check_accessibility" = "Current version v%@. Check for updates.";
 "ui.footer.version_update_help" = "Open release notes for v%@";
 "ui.footer.version_update_accessibility" = "Current version v%@. Update available v%@.";
 "ui.footer.core_upgrade.running" = "Updating...";

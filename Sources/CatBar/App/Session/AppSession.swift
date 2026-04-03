@@ -323,7 +323,7 @@ final class AppSession: ObservableObject {
     var activatedTabRefreshGeneration: Int = 0
     var configFileSignatureSnapshot: [String: String] = [:]
     var pendingConfigChangeRestart = false
-    var isLatestAppReleaseCheckInFlight = false
+    @Published var isLatestAppReleaseCheckInFlight: Bool = false
 
     let defaults = UserDefaults.standard
     @AppStorage("catbar.auto.start.core") private var autoStartCore: Bool = false

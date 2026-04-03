@@ -1,0 +1,431 @@
+mixed-port: 7890
+allow-lan: true
+log-level: info
+mode: rule
+ipv6: true
+external-controller: 127.0.0.1:9090
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
+geo-update-interval: 24
+geox-url:
+  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - Mijia Cloud
+    - +.push.apple.com
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  cache-algorithm: arc
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - +.local
+    - time.*.com
+    - time.*.gov
+    - +.market.xiaomi.com
+    - +.push.apple.com
+  nameserver-policy:
+    geosite:cn:
+      - https://doh.pub/dns-query
+      - https://dns.alidns.com/dns-query
+    geosite:private:
+      - 223.5.5.5
+      - 119.29.29.29
+  nameserver:
+    - https://doh.pub/dns-query
+    - quic://dns.alidns.com
+  fallback:
+    - tls://8.8.4.4
+    - tls://1.1.1.1
+  default-nameserver:
+    - 223.5.5.5
+    - 114.114.114.114
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  direct-nameserver:
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+  direct-nameserver-follow-policy: true
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    geosite:
+      - gfw
+    ipcidr:
+      - 240.0.0.0/4
+    domain:
+      - +.google.com
+      - +.googleapis.com
+      - +.gstatic.com
+      - +.youtube.com
+      - +.facebook.com
+      - +.twitter.com
+      - +.x.com
+      - +.openai.com
+      - +.githubusercontent.com
+proxies:
+
+  
+
+
+proxy-providers:
+  sub: &proxy_provider_base
+    type: http
+    url: https://www.mihomo.me/api/v1/proxies?secret=xxx
+    header:
+      User-Agent:
+        - mihomo/1.18.3
+    interval: 86400
+    path: ./proxy-providers/sub.yaml
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+    exclude-filter: 过期|剩余|套餐|域名|更新|客服|优先|官网|软件|IOS|安卓|Mac|频道|卸载|选择
+  sub2:
+    <<: *proxy_provider_base
+    url: https://www.mihomo.me/api/v1/proxies?secret=xxx
+    path: ./proxy-providers/sub2.yaml
+
+proxy-groups:
+  - name: Self Node
+    type: select
+    proxies:
+
+  - name: Sub
+    type: select
+    use:
+      - sub
+      - sub2
+  - name: Auto Sub
+    type: url-test
+    use:
+      - sub
+      - sub2
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: Global Proxy
+    type: select
+    proxies:
+      - Self Node
+      - Sub
+      - Auto Sub
+  - name: Final
+    type: select
+    proxies:
+      - Global Proxy
+      - DIRECT
+  - name: Global Direct
+    type: select
+    proxies:
+      - DIRECT
+      - Global Proxy
+  - name: AdBlock
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+  - name: Apple
+    type: select
+    proxies: &direct_or_global_proxy
+      - DIRECT
+      - Global Proxy
+  - name: Cursor
+    type: select
+    proxies: &self_or_sub
+      - Self Node
+      - Sub
+  - name: GitHub
+    type: select
+    proxies: *self_or_sub
+  - name: Google
+    type: select
+    proxies: *self_or_sub
+  - name: Microsoft
+    type: select
+    proxies: *direct_or_global_proxy
+  - name: OpenAI
+    type: select
+    proxies: *self_or_sub
+  - name: Twitter
+    type: select
+    proxies: *self_or_sub
+  - name: Telegram
+    type: select
+    proxies: *self_or_sub
+  - name: Gaming
+    type: select
+    proxies: *direct_or_global_proxy
+  - name: Streaming
+    type: select
+    proxies:
+      - Global Proxy
+      - DIRECT
+  - name: Speedtest
+    type: select
+    proxies: *direct_or_global_proxy
+
+rule-providers:
+  ##### AdBlock ######
+  advertising: &classical_rule_provider
+    type: http
+    behavior: classical
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Advertising/Advertising.yaml?raw=true
+    path: ./rule-providers/advertising.yaml
+    interval: 86400
+  privacy:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Privacy/Privacy.yaml?raw=true
+    path: ./rule-providers/privacy.yaml
+  hijacking:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Hijacking/Hijacking.yaml?raw=true
+    path: ./rule-providers/hijacking.yaml
+
+  ##### DIRECT ######
+  lan:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Lan/Lan.yaml?raw=true
+    path: ./rule-providers/lan.yaml
+
+  ##### Global Direct ######
+  wechat:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/WeChat/WeChat.yaml?raw=true
+    path: ./rule-providers/wechat.yaml
+  direct:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Direct/Direct.yaml?raw=true
+    path: ./rule-providers/direct.yaml
+  bilibili:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/BiliBili/BiliBili.yaml?raw=true
+    path: ./rule-providers/bilibili.yaml
+  chinamedia:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/ChinaMedia/ChinaMedia.yaml?raw=true
+    path: ./rule-providers/chinamedia.yaml
+  chinamax:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/ChinaMax/ChinaMax.yaml?raw=true
+    path: ./rule-providers/chinamax.yaml
+
+  ##### GitHub ######
+  github:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/GitHub/GitHub.yaml?raw=true
+    path: ./rule-providers/github.yaml
+
+  ##### Google ######
+  google:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Google/Google.yaml?raw=true
+    path: ./rule-providers/google.yaml
+  youtube:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/YouTube/YouTube.yaml?raw=true
+    path: ./rule-providers/youtube.yaml
+
+  ##### Microsoft ######
+  microsoft:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Microsoft/Microsoft.yaml?raw=true
+    path: ./rule-providers/microsoft.yaml
+
+  ##### Apple ######
+  apple:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Apple/Apple.yaml?raw=true
+    path: ./rule-providers/apple.yaml
+
+  ##### OpenAI ######
+  open-ai:
+    <<: *classical_rule_provider
+    format: yaml
+    interval: 0
+    path: ./rule-providers/open-ai.yaml
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/OpenAI/OpenAI.yaml?raw=true
+
+  ##### Twitter ######
+  twitter:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Twitter/Twitter.yaml?raw=true
+    path: ./rule-providers/twitter.yaml
+
+  ##### Telegram ######
+  telegram:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Telegram/Telegram.yaml?raw=true
+    path: ./rule-providers/telegram.yaml
+
+  ##### Streaming ######
+  netflix:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Netflix/Netflix.yaml?raw=true
+    path: ./rule-providers/netflix.yaml
+  disney:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Disney/Disney.yaml?raw=true
+    path: ./rule-providers/disney.yaml
+  spotify:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Spotify/Spotify.yaml?raw=true
+    path: ./rule-providers/spotify.yaml
+  hbo:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/HBO/HBO.yaml?raw=true
+    path: ./rule-providers/hbo.yaml
+  primevideo:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/PrimeVideo/PrimeVideo.yaml?raw=true
+    path: ./rule-providers/primevideo.yaml
+  globalmedia:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/GlobalMedia/GlobalMedia.yaml?raw=true
+    path: ./rule-providers/globalmedia.yaml
+
+  ##### Speedtest ######
+  speedtest:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Speedtest/Speedtest.yaml?raw=true
+    path: ./rule-providers/speedtest.yaml
+
+  ##### Gaming ######
+  steam:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Steam/Steam.yaml?raw=true
+    path: ./rule-providers/steam.yaml
+  epic:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Epic/Epic.yaml?raw=true
+    path: ./rule-providers/epic.yaml
+  nintendo:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Nintendo/Nintendo.yaml?raw=true
+    path: ./rule-providers/nintendo.yaml
+
+  ##### Global Proxy ######
+  facebook:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Facebook/Facebook.yaml?raw=true
+    path: ./rule-providers/facebook.yaml
+  instagram:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Instagram/Instagram.yaml?raw=true
+    path: ./rule-providers/instagram.yaml
+  discord:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Discord/Discord.yaml?raw=true
+    path: ./rule-providers/discord.yaml
+  reddit:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/Reddit/Reddit.yaml?raw=true
+    path: ./rule-providers/reddit.yaml
+  tiktok:
+    <<: *classical_rule_provider
+    url: https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/TikTok/TikTok.yaml?raw=true
+    path: ./rule-providers/tiktok.yaml
+
+rules:
+  ##### AdBlock ######
+  - RULE-SET, advertising, AdBlock
+  - RULE-SET, privacy, AdBlock
+  - RULE-SET, hijacking, AdBlock
+
+  ##### DIRECT ######
+  - RULE-SET, lan, DIRECT
+
+  ##### Global Direct ######
+  - RULE-SET, wechat, Global Direct
+  - RULE-SET, direct, Global Direct
+  - RULE-SET, bilibili, Global Direct
+  - RULE-SET, chinamedia, Global Direct
+  - RULE-SET, chinamax, Global Direct
+  - GEOIP, CN, Global Direct, no-resolve
+
+  ##### Self Node ######
+  - DOMAIN-SUFFIX, colocrossing.com, Self Node
+
+  ##### Cursor ######
+  - DOMAIN-SUFFIX, cursor.com, Cursor
+  - DOMAIN-SUFFIX, cursor.sh, Cursor
+  - DOMAIN-SUFFIX, cursor-cdn.com, Cursor
+  - DOMAIN-SUFFIX, cursorapi.com, Cursor
+
+  ##### GitHub ######
+  - RULE-SET, github, GitHub
+
+  ##### Google ######
+  - RULE-SET, google, Google
+  - RULE-SET, youtube, Google
+
+  ##### Microsoft ######
+  - RULE-SET, microsoft, Microsoft
+
+  ##### Apple ######
+  - RULE-SET, apple, Apple
+
+  ##### OpenAI ######
+  - RULE-SET, open-ai, OpenAI
+
+  ##### Twitter ######
+  - RULE-SET, twitter, Twitter
+
+  ##### Telegram ######
+  - RULE-SET, telegram, Telegram
+
+  ##### Streaming ######
+  - RULE-SET, netflix, Streaming
+  - RULE-SET, disney, Streaming
+  - RULE-SET, spotify, Streaming
+  - RULE-SET, hbo, Streaming
+  - RULE-SET, primevideo, Streaming
+  - RULE-SET, globalmedia, Streaming
+
+  ##### Speedtest ######
+  - RULE-SET, speedtest, Speedtest
+
+  ##### Gaming ######
+  - RULE-SET, steam, Gaming
+  - RULE-SET, epic, Gaming
+  - RULE-SET, nintendo, Gaming
+
+  ##### Global Proxy ######
+  - RULE-SET, facebook, Global Proxy
+  - RULE-SET, instagram, Global Proxy
+  - RULE-SET, discord, Global Proxy
+  - RULE-SET, reddit, Global Proxy
+  - RULE-SET, tiktok, Global Proxy
+  - DOMAIN-SUFFIX, awwwards.com, Global Proxy
+  - DOMAIN-SUFFIX, pinterest.com, Global Proxy
+  - DOMAIN-SUFFIX, brew.sh, Global Proxy
+
+  ##### Final ######
+
+  - MATCH, Final

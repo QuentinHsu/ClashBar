@@ -93,9 +93,6 @@ extension AppSession {
         guard presented else { return }
         self.flushPendingTrafficSnapshotIfNeeded(immediately: true)
         self.scheduleRefreshForActivatedTab(activeMenuTab)
-        Task { [weak self] in
-            await self?.refreshLatestAppRelease()
-        }
     }
 
     func setActiveMenuTab(_ tab: RootTab) {

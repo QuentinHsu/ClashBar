@@ -384,24 +384,30 @@ extension MenuBarRootView {
                 "ui.footer.version_update_accessibility",
                 self.appSession.currentAppVersionText,
                 update.displayVersion))
+        } else if self.appSession.isLatestAppReleaseCheckInFlight {
+            self.footerVersionBadge(
+                text: tr("ui.footer.version", self.appSession.currentAppVersionText),
+                symbol: "arrow.triangle.2.circlepath",
+                tint: self.nativeSecondaryLabel,
+                emphasized: false)
+            .help(tr("ui.footer.version_check_running"))
         } else {
-            if let releaseIndexURL = self.appSession.appReleaseIndexURL {
-                Link(destination: releaseIndexURL) {
-                    self.footerVersionBadge(
-                        text: tr("ui.footer.version", self.appSession.currentAppVersionText),
-                        symbol: nil,
-                        tint: self.nativeSecondaryLabel,
-                        emphasized: false)
+            Button {
+                Task {
+                    await self.appSession.refreshLatestAppRelease()
                 }
-                .buttonStyle(.plain)
-                .help(tr("ui.footer.version", self.appSession.currentAppVersionText))
-            } else {
+            } label: {
                 self.footerVersionBadge(
                     text: tr("ui.footer.version", self.appSession.currentAppVersionText),
-                    symbol: nil,
+                    symbol: "arrow.clockwise",
                     tint: self.nativeSecondaryLabel,
                     emphasized: false)
             }
+            .buttonStyle(.plain)
+            .help(tr("ui.footer.version_check_help"))
+            .accessibilityLabel(tr(
+                "ui.footer.version_check_accessibility",
+                self.appSession.currentAppVersionText))
         }
     }
 

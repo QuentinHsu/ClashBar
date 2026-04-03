@@ -168,6 +168,9 @@
 
 "ui.footer.core_mihomo" = "MIHOMO %@";
 "ui.footer.version" = "v%@";
+"ui.footer.version_check_help" = "检查 CatBar 更新";
+"ui.footer.version_check_running" = "正在检查 CatBar 更新";
+"ui.footer.version_check_accessibility" = "当前版本 v%@。检查更新。";
 "ui.footer.version_update_help" = "查看 v%@ 版本说明";
 "ui.footer.version_update_accessibility" = "当前版本 v%@，可更新到 v%@。";
 "ui.footer.core_upgrade.running" = "更新中...";
