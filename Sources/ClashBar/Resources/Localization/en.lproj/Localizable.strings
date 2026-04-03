@@ -101,7 +101,7 @@
 "ui.section.basic_settings" = "Basic Settings";
 "ui.section.app_settings" = "App Settings";
 "ui.section.proxy_ports" = "Proxy Ports";
-"ui.section.maintenance" = "Maintenance";
+"ui.section.maintenance" = "Core Operations";
 
 "ui.rules.column.target_type" = "Target / Type";
 "ui.rules.column.policy" = "Policy";

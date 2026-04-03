@@ -101,7 +101,7 @@
 "ui.section.basic_settings" = "基础设置";
 "ui.section.app_settings" = "应用设置";
 "ui.section.proxy_ports" = "代理端口";
-"ui.section.maintenance" = "系统维护";
+"ui.section.maintenance" = "内核操作";
 
 "ui.rules.column.target_type" = "目标 / 类型";
 "ui.rules.column.policy" = "策略";

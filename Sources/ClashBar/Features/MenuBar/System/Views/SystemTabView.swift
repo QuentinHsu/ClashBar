@@ -491,15 +491,17 @@ extension MenuBarRootView {
                         }
                     }
 
-                    HStack(spacing: T.space6) {
-                        Button {
-                            appSession.showCoreDirectoryInFinder()
-                        } label: {
-                            Label(tr("ui.action.open_core_directory"), systemImage: "folder")
-                                .frame(maxWidth: .infinity, alignment: .center)
+                    if !isRemote {
+                        HStack(spacing: T.space6) {
+                            Button {
+                                appSession.showCoreDirectoryInFinder()
+                            } label: {
+                                Label(tr("ui.action.open_core_directory"), systemImage: "folder")
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                            }
+                            .appBorderedButtonStyle()
+                            .controlSize(.small)
                         }
-                        .appBorderedButtonStyle()
-                        .controlSize(.small)
                     }
                 }
                 .menuRowPadding(vertical: T.space4)
