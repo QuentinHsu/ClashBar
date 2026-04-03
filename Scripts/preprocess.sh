@@ -15,6 +15,7 @@ MIHOMO_RESOURCE_PATH="$ROOT/Sources/CatBar/Resources/bin/mihomo"
 PREPROCESSED_MIHOMO_PATH="$PREPROCESS_DIR/mihomo"
 ICON_SOURCE="$ROOT/Sources/CatBar/Resources/Assets.xcassets/BrandLogo.imageset/logo.png"
 PREPROCESSED_ICON_PATH="$PREPROCESS_DIR/${APP_NAME}.icns"
+PACKAGED_ICON_FALLBACK_PATH="$ROOT/dist/${APP_NAME}.app/Contents/Resources/${APP_NAME}.icns"
 MIHOMO_TMP_DIR=""
 
 cleanup() {
@@ -167,7 +168,14 @@ prepare_icon() {
     echo "Prepared app icon: $PREPROCESSED_ICON_PATH"
   else
     echo "Warning: failed to generate .icns from $ICON_SOURCE"
-    rm -f "$PREPROCESSED_ICON_PATH"
+    if [ -f "$PACKAGED_ICON_FALLBACK_PATH" ]; then
+      cp "$PACKAGED_ICON_FALLBACK_PATH" "$PREPROCESSED_ICON_PATH"
+      echo "Reused packaged app icon fallback: $PACKAGED_ICON_FALLBACK_PATH"
+    elif [ -f "$PREPROCESSED_ICON_PATH" ]; then
+      echo "Keeping existing preprocessed icon: $PREPROCESSED_ICON_PATH"
+    else
+      rm -f "$PREPROCESSED_ICON_PATH"
+    fi
   fi
 
   rm -rf "$iconset_dir"

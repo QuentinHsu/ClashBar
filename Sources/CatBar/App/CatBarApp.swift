@@ -81,6 +81,11 @@ struct CatBarApp: App {
                 }
                 .keyboardShortcut("K", modifiers: [.command, .shift])
 
+                Button(self.tr("ui.action.upgrade_ui")) {
+                    Task { await self.commandsViewModel.checkForAppUpdates() }
+                }
+                .keyboardShortcut("U", modifiers: [.command, .option])
+
                 Button(self.tr("ui.quick.copy_terminal")) {
                     self.commandsViewModel.copyProxyCommand()
                 }

@@ -370,7 +370,24 @@ extension MenuBarRootView {
 
     @ViewBuilder
     var footerVersionInfo: some View {
-        if let update = self.appSession.availableAppUpdate {
+        if self.appSession.supportsInAppUpdates {
+            Button {
+                Task {
+                    await self.appSession.checkForAppUpdates()
+                }
+            } label: {
+                self.footerVersionBadge(
+                    text: tr("ui.footer.version", self.appSession.currentAppVersionText),
+                    symbol: "arrow.clockwise",
+                    tint: self.nativeSecondaryLabel,
+                    emphasized: false)
+            }
+            .buttonStyle(.plain)
+            .help(tr("ui.footer.version_check_help"))
+            .accessibilityLabel(tr(
+                "ui.footer.version_check_accessibility",
+                self.appSession.currentAppVersionText))
+        } else if let update = self.appSession.availableAppUpdate {
             Link(destination: update.releaseURL) {
                 self.footerVersionBadge(
                     text: tr("ui.footer.version", update.displayVersion),
@@ -394,7 +411,7 @@ extension MenuBarRootView {
         } else {
             Button {
                 Task {
-                    await self.appSession.refreshLatestAppRelease()
+                    await self.appSession.checkForAppUpdates()
                 }
             } label: {
                 self.footerVersionBadge(

@@ -34,6 +34,7 @@ final class AppSession: ObservableObject {
     }
 
     let connectionsStore = ConnectionsStore()
+    var appUpdater: (any AppUpdating)?
 
     @Published var currentMode: CoreMode = .rule
     @Published var logLevel: String = "info"

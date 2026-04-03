@@ -26,6 +26,19 @@ extension AppSession {
         URL(string: "https://github.com/QuentinHsu/cat-bar/releases")
     }
 
+    var supportsInAppUpdates: Bool {
+        self.appUpdater?.isSupported == true
+    }
+
+    func checkForAppUpdates() async {
+        if self.supportsInAppUpdates {
+            self.appUpdater?.checkForUpdates()
+            return
+        }
+
+        await self.refreshLatestAppRelease()
+    }
+
     func refreshLatestAppRelease() async {
         guard !self.isLatestAppReleaseCheckInFlight else { return }
 

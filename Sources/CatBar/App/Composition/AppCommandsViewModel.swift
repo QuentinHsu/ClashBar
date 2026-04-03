@@ -71,4 +71,8 @@ final class AppCommandsViewModel {
     func clearAllLogs() {
         self.session.clearAllLogs()
     }
+
+    func checkForAppUpdates() async {
+        await self.session.checkForAppUpdates()
+    }
 }

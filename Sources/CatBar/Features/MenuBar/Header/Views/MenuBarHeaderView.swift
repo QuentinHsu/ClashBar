@@ -18,7 +18,7 @@ extension MenuBarRootView {
                                     lineWidth: MenuBarLayoutTokens.stroke)
                         }
 
-                    if let brandImage = BrandIcon.image {
+                    if let brandImage = BrandIcon.panelImage {
                         Image(nsImage: brandImage)
                             .resizable()
                             .interpolation(.high)

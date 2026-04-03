@@ -14,6 +14,27 @@
 - `vars.SPARKLE_PUBLIC_ED_KEY`
 - `secrets.SPARKLE_PRIVATE_ED_KEY`
 
+## 图片资源与内存
+
+菜单栏应用对常驻内存很敏感，静态图片也可能显著放大 footprint。原因通常不是磁盘文件太大，而是图片在运行时会被解码成位图并被 AppKit / CoreGraphics 缓存。
+
+- 不要直接把大图原尺寸加载到小 UI 上。例如 `2048x2048` 的 PNG 即使文件只有几百 KB，解码后单份 RGBA 位图也可能接近 `16MB`。
+- 所有用于状态栏、菜单头图、徽标、按钮图标的位图，都应按实际显示尺寸下采样后再加载，避免直接使用 `NSImage(contentsOf:)` 读取原图。
+- 状态栏图标、按钮图标建议读入尺寸不超过 `72px`。
+- 面板头图建议读入尺寸不超过 `128px`。
+- 只有真正需要导出、分享、拖拽或全尺寸预览时，才允许保留原始大图。
+- 同一资源如果会出现在多个尺寸场景，应该为每个场景提供单独的加载入口，而不是共享一份大图对象。
+- 新增图片资源时，优先检查像素尺寸，而不只看文件大小。
+
+当前仓库的品牌图标加载实现可参考 `Sources/CatBar/Shared/UI/Components/BrandIcon.swift`。该实现使用 `CGImageSourceCreateThumbnailAtIndex` 按用途下采样，避免了大图解码造成的常驻内存放大。
+
+如果怀疑图片导致内存上涨，优先排查：
+
+- `vmmap -summary <pid>` 里的 `CG image`、`CG raster data`
+- 是否把大 PNG 直接喂给了 `NSImage(contentsOf:)`
+- 是否同一张图被多个 `NSImage` / `NSBitmapImageRep` / 模板渲染流程重复缓存
+- 是否为 `1x/2x/3x` 或多个展示位置生成了多份 representation
+
 ## 正式版发布
 
 正式版默认通过 GitHub Actions 里的 `Release DMG` 工作流发布，推荐直接使用 `workflow_dispatch` 的 `auto` bump 模式。

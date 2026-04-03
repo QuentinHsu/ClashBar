@@ -12,13 +12,19 @@ let package = Package(
         .executable(name: "CatBar", targets: ["CatBar"]),
         .executable(name: "CatBarProxyHelper", targets: ["CatBarProxyHelper"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.1"),
+    ],
     targets: [
         .target(
             name: "ProxyHelperShared",
             path: "Sources/ProxyHelperShared"),
         .executableTarget(
             name: "CatBar",
-            dependencies: ["ProxyHelperShared"],
+            dependencies: [
+                "ProxyHelperShared",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             path: "Sources/CatBar",
             resources: [
                 .process("Resources"),

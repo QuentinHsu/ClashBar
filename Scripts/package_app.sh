@@ -244,6 +244,13 @@ mkdir -p \
 cp "$BIN" "$APP/Contents/MacOS/CatBar"
 chmod +x "$APP/Contents/MacOS/CatBar"
 
+# SwiftPM builds an executable, not an app bundle. When we embed third-party
+# frameworks like Sparkle, add the app bundle Frameworks directory to rpath so
+# dyld can resolve @rpath entries after packaging.
+if otool -L "$APP/Contents/MacOS/CatBar" | grep -q '@rpath/Sparkle.framework'; then
+  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/CatBar"
+fi
+
 rm -rf "$APP/Contents/Resources/CatBar_CatBar.bundle"
 cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/CatBar_CatBar.bundle"
 
@@ -309,8 +316,8 @@ if [ -n "$SPARKLE_PUBLIC_ED_KEY" ]; then
   SPARKLE_PLIST_ENTRIES="
 <key>SUFeedURL</key><string>${SPARKLE_FEED_URL_RESOLVED}</string>
 <key>SUPublicEDKey</key><string>${SPARKLE_PUBLIC_ED_KEY}</string>
-<key>SUEnableAutomaticChecks</key><true/>
-<key>SUAllowsAutomaticUpdates</key><true/>"
+<key>SUEnableAutomaticChecks</key><false/>
+<key>SUAllowsAutomaticUpdates</key><false/>"
 fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
