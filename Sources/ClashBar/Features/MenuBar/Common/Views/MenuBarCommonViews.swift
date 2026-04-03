@@ -225,6 +225,7 @@ extension MenuBarRootView {
             }
             .menuRowPadding(vertical: MenuBarLayoutTokens.space2)
             .background(self.footerSurfaceBackground)
+            .padding(.bottom, MenuBarLayoutTokens.space8)
         }
     }
 
