@@ -146,9 +146,8 @@ extension AppSession {
             socksPort: socksPort)
     }
 
-    func resolveSystemProxyTargetFromRuntimeConfig() async throws -> (host: String, ports: SystemProxyPorts) {
-        let config = try await fetchRuntimeConfigSnapshot()
-        let ports = self.systemProxyPorts(from: config)
+    func resolveSystemProxyTargetFromState() throws -> (host: String, ports: SystemProxyPorts) {
+        let ports = self.currentSystemProxyPortsFromState()
         guard ports.hasEnabledPort else {
             throw SystemProxyServiceError.invalidPort
         }
@@ -169,7 +168,7 @@ extension AppSession {
         }
 
         do {
-            let target = try await resolveSystemProxyTargetFromRuntimeConfig()
+            let target = try self.resolveSystemProxyTargetFromState()
             let isConfigured = try await isSystemProxyConfigured(host: target.host, ports: target.ports)
             if !isConfigured {
                 try await self.applySystemProxy(enabled: true, host: target.host, ports: target.ports)

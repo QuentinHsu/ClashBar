@@ -181,6 +181,23 @@ extension MenuBarRootView {
         }
     }
 
+    func settingsInlineHintRow(text: String, color: Color, symbol: String) -> some View {
+        HStack(alignment: .top, spacing: T.space6) {
+            Image(systemName: symbol)
+                .font(.app(size: T.FontSize.caption, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 14, alignment: .center)
+
+            Text(text)
+                .font(.app(size: T.FontSize.caption, weight: .medium))
+                .foregroundStyle(nativeSecondaryLabel)
+                .lineLimit(3)
+
+            Spacer(minLength: 0)
+        }
+        .menuRowPadding(vertical: T.space4)
+    }
+
     func statusBarModeLabel(_ mode: StatusBarDisplayMode) -> String {
         switch mode {
         case .iconAndSpeed:
@@ -395,6 +412,13 @@ extension MenuBarRootView {
                             Task { await appSession.toggleSystemProxy(value) }
                         }),
                     isDisabled: appSession.isProxySyncing)
+
+                if let proxyHint = appSession.systemProxyOpenFailureHint?.trimmedNonEmpty {
+                    self.settingsInlineHintRow(
+                        text: "\(tr("app.system_proxy.alert.title")): \(proxyHint)",
+                        color: self.nativeCritical.opacity(T.Opacity.solid),
+                        symbol: "exclamationmark.triangle.fill")
+                }
 
                 self.settingsToggleRow(
                     tr("ui.quick.tun_mode"),

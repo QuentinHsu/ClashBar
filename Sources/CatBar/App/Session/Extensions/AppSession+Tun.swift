@@ -33,8 +33,16 @@ extension AppSession {
                 try await self.ensureTunPermissions(requestIfMissing: true)
             }
 
-            guard self.isRemoteTarget || self.isRuntimeRunning else { return }
+            guard self.isRemoteTarget || self.isRuntimeRunning else {
+                isTunEnabled = enabled
+                persistEditableSettingsSnapshot()
+                appendLog(
+                    level: "info",
+                    message: tr("log.tun.toggled", enabled ? tr("log.tun.enabled") : tr("log.tun.disabled")))
+                return
+            }
             try await self.patchTunConfig(enable: enabled)
+            await self.closeAllConnections()
 
             let config = try await fetchRuntimeConfigSnapshot()
             let actualState = config.tunEnabled ?? false
@@ -174,6 +182,7 @@ extension AppSession {
     func applyTunRuntimeChange(enabled: Bool) async throws {
         guard self.isRemoteTarget || self.isRuntimeRunning else { return }
         try await self.patchTunConfig(enable: enabled)
+        await self.closeAllConnections()
         try await self.verifyTunRuntimeState(expectedEnabled: enabled)
     }
 

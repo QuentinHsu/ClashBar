@@ -121,9 +121,37 @@ extension AppSession {
         defer { isProxySyncing = false }
         defer { self.systemProxyEnableIntentInFlight = false }
 
+        guard self.isRemoteTarget || self.isRuntimeRunning else {
+            isSystemProxyEnabled = enabled
+            persistEditableSettingsSnapshot()
+            let state = enabled ? tr("log.system_proxy.enabled") : tr("log.system_proxy.disabled")
+            appendLog(level: "info", message: tr("log.system_proxy.toggled", state))
+
+            do {
+                if enabled {
+                    let ports = self.currentSystemProxyPortsFromState()
+                    let host = self.controllerHost()
+                    try await applySystemProxy(enabled: true, host: host, ports: ports)
+                    systemProxyActiveDisplay = self.buildSystemProxyDisplayString(host: host, ports: ports)
+                    await self.refreshSystemProxyHelperStatus()
+                } else {
+                    try await applySystemProxy(enabled: false, host: self.controllerHost(), ports: .disabled)
+                    systemProxyActiveDisplay = nil
+                    self.resetSystemProxyObservedState()
+                }
+            } catch {
+                appendLog(level: "error", message: tr("log.system_proxy.toggle_failed", systemProxyErrorMessage(error)))
+                if enabled {
+                    self.updateSystemProxyOpenFailureHint(for: error)
+                    await self.refreshSystemProxyHelperStatus()
+                }
+            }
+            return
+        }
+
         do {
             if enabled {
-                let target = try await resolveSystemProxyTargetFromRuntimeConfig()
+                let target = try resolveSystemProxyTargetFromState()
                 try await applySystemProxy(enabled: true, host: target.host, ports: target.ports)
                 systemProxyActiveDisplay = self.buildSystemProxyDisplayString(host: target.host, ports: target.ports)
             } else {
@@ -132,6 +160,7 @@ extension AppSession {
             }
 
             try await self.patchRuntimeConfigUseCase().execute(body: ["mode": .string(currentMode.rawValue)])
+            await self.closeAllConnections()
 
             isSystemProxyEnabled = enabled
             self.clearSystemProxyOpenFailureHint()

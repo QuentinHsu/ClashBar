@@ -534,7 +534,7 @@ extension AppSession {
             defer { self.isProxySyncing = false }
 
             do {
-                let target = try await self.resolveSystemProxyTargetFromRuntimeConfig()
+                let target = try self.resolveSystemProxyTargetFromState()
                 let isAlreadyConfigured = try await self.isSystemProxyConfigured(
                     host: target.host,
                     ports: target.ports)

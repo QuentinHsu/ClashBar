@@ -115,7 +115,7 @@ struct SystemProxyService {
 
         switch self.attemptHelperRegistration() {
         case .ready:
-            _ = try? await self.triggerHelperDemandLaunchAndWait()
+            _ = try? await self.waitForHelperResponsiveness()
         case .needsApproval, .failed:
             return
         }
@@ -273,17 +273,13 @@ struct SystemProxyService {
     }
 
     private func ensureHelperProcessResponsive() async throws {
-        if try self.isHelperProcessRunning() {
-            return
-        }
-
-        if try await self.triggerHelperDemandLaunchAndWait() {
+        if try await self.waitForHelperResponsiveness() {
             return
         }
 
         try await self.reregisterHelper()
 
-        if try await self.triggerHelperDemandLaunchAndWait() {
+        if try await self.waitForHelperResponsiveness() {
             return
         }
 
@@ -413,24 +409,17 @@ struct SystemProxyService {
         try self.ensureHelperRegistered()
     }
 
-    private func triggerHelperDemandLaunchAndWait() async throws -> Bool {
-        do {
-            try await self.invokeHelperPing()
-        } catch {
-            guard self.isHelperConnectionFailure(error) else {
-                throw error
-            }
-        }
-
+    private func waitForHelperResponsiveness() async throws -> Bool {
         for attempt in 0..<self.helperLaunchRetryAttempts {
-            if try self.isHelperProcessRunning() {
+            do {
+                try await self.invokeHelperPing()
                 return true
-            }
-            if attempt < self.helperLaunchRetryAttempts - 1 {
-                try await Task.sleep(nanoseconds: self.helperLaunchRetryDelayNanoseconds)
+            } catch {
+                if attempt < self.helperLaunchRetryAttempts - 1 {
+                    try await Task.sleep(nanoseconds: self.helperLaunchRetryDelayNanoseconds)
+                }
             }
         }
-
         return false
     }
 
@@ -457,7 +446,7 @@ struct SystemProxyService {
     private func isHelperProcessRunning() throws -> Bool {
         let result = try self.runProcessSynchronously(
             executable: "/usr/bin/pgrep",
-            arguments: ["-x", ProxyHelperConstants.machServiceName])
+            arguments: ["-f", ".*/\(ProxyHelperConstants.machServiceName)$"])
         switch result.exitCode {
         case 0:
             return true

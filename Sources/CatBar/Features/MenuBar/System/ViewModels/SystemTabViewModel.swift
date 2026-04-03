@@ -26,6 +26,13 @@ enum SystemTabViewModel {
                 symbol: "exclamationmark.triangle.fill")
         }
 
+        if let proxyHint = session.systemProxyOpenFailureHint?.trimmedNonEmpty {
+            return SystemFeedbackState(
+                message: "\(session.tr("app.system_proxy.alert.title")): \(proxyHint)",
+                kind: .error,
+                symbol: "exclamationmark.triangle.fill")
+        }
+
         if let launchError = session.launchAtLoginErrorMessage.trimmedNonEmpty {
             return SystemFeedbackState(
                 message: launchError,
