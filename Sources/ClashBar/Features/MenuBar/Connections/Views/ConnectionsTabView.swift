@@ -31,7 +31,7 @@ extension MenuBarRootView {
             emptyCard(tr("ui.empty.connections"))
         } else {
             MeasurementAwareVStack(spacing: 0) {
-                SeparatedForEach(data: connections, id: \.id, separator: nativeSeparator) { conn in
+                ForEach(connections, id: \.id) { conn in
                     self.connectionRow(conn)
                 }
             }
@@ -168,40 +168,51 @@ extension MenuBarRootView {
     }
 
     private func connectionRowMetrics(time: String, network: String, up: String, down: String) -> some View {
-        // Use static rowContentWidth — no GeometryReader needed since panel is always 360pt
-        let columnWidth = max(
-            (ConnectionsLayout.rowContentWidth - (ConnectionsLayout.secondLineSpacing * 3)) / 4,
-            0)
+        return HStack(spacing: 0) {
+            // Left: time · network (plain text, no icons)
+            Text(time.isEmpty ? tr("ui.common.na") : time)
+                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
+                .foregroundStyle(nativeSecondaryLabel)
 
-        return HStack(spacing: ConnectionsLayout.secondLineSpacing) {
-            self.connectionsMetricColumn(
-                symbol: "clock",
-                text: time,
-                fallback: tr("ui.common.na"),
-                width: columnWidth)
-            self.connectionsMetricColumn(
-                symbol: "network",
-                text: network,
-                fallback: tr("ui.common.na"),
-                width: columnWidth)
-            self.connectionsMetricColumn(
-                symbol: "arrow.up",
-                text: up,
-                symbolColor: nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid),
-                textColor: nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid),
-                spacing: 0,
-                truncation: .tail,
-                width: columnWidth)
-            self.connectionsMetricColumn(
-                symbol: "arrow.down",
-                text: down,
-                symbolColor: nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid),
-                textColor: nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid),
-                spacing: 0,
-                truncation: .tail,
-                width: columnWidth)
+            Text(" · ")
+                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
+                .foregroundStyle(nativeTertiaryLabel)
+
+            Text(network.isEmpty ? tr("ui.common.na") : network)
+                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
+                .foregroundStyle(self.connectionNetworkColor(network))
+
+            Spacer(minLength: MenuBarLayoutTokens.space4)
+
+            // Right: ↑upload ↓download
+            HStack(spacing: MenuBarLayoutTokens.space4) {
+                HStack(spacing: 0) {
+                    Image(systemName: "arrow.up")
+                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid))
+                    Text(up)
+                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
+                        .foregroundStyle(nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid))
+                }
+                HStack(spacing: 0) {
+                    Image(systemName: "arrow.down")
+                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid))
+                    Text(down)
+                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
+                        .foregroundStyle(nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid))
+                }
+            }
         }
         .frame(height: ConnectionsLayout.rowLineHeight)
+    }
+
+    private func connectionNetworkColor(_ network: String) -> Color {
+        switch network.uppercased() {
+        case "UDP": return nativeWarning.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case "TCP": return nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid)
+        default: return nativeSecondaryLabel
+        }
     }
 
     private func connectionRowCloseButton(id: String, hovered: Bool) -> some View {
@@ -291,23 +302,16 @@ extension MenuBarRootView {
     }
 
     func connectionsChainsLine(parts: [String]) -> some View {
-        let chainText = parts.joined(separator: " > ")
+        let chainText = parts.joined(separator: " › ")
         let displayText = parts.isEmpty ? tr("ui.common.na") : chainText
 
-        return HStack(spacing: MenuBarLayoutTokens.space2) {
-            Image(systemName: "point.3.connected.trianglepath.dotted")
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
-                .foregroundStyle(nativeSecondaryLabel)
-                .frame(width: 10, alignment: .leading)
-
-            Text(displayText)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
-                .foregroundStyle(nativeSecondaryLabel)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(height: ConnectionsLayout.rowLineHeight, alignment: .leading)
+        return Text(displayText)
+            .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
+            .foregroundStyle(nativeSecondaryLabel)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: ConnectionsLayout.rowLineHeight, alignment: .leading)
     }
 
     func connectionsTopLineLayout(
