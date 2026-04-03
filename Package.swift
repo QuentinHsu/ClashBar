@@ -3,28 +3,28 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClashBar",
+    name: "CatBar",
     defaultLocalization: "zh-Hans",
     platforms: [
         .macOS(.v13),
     ],
     products: [
-        .executable(name: "ClashBar", targets: ["ClashBar"]),
-        .executable(name: "ClashBarProxyHelper", targets: ["ClashBarProxyHelper"]),
+        .executable(name: "CatBar", targets: ["CatBar"]),
+        .executable(name: "CatBarProxyHelper", targets: ["CatBarProxyHelper"]),
     ],
     targets: [
         .target(
             name: "ProxyHelperShared",
             path: "Sources/ProxyHelperShared"),
         .executableTarget(
-            name: "ClashBar",
+            name: "CatBar",
             dependencies: ["ProxyHelperShared"],
-            path: "Sources/ClashBar",
+            path: "Sources/CatBar",
             resources: [
                 .process("Resources"),
             ]),
         .executableTarget(
-            name: "ClashBarProxyHelper",
+            name: "CatBarProxyHelper",
             dependencies: ["ProxyHelperShared"],
             path: "Sources/ProxyHelper/Daemon"),
     ])

@@ -1,10 +1,10 @@
 import Foundation
 
 public enum ProxyHelperConstants {
-    public static let machServiceName = "com.clashbar.helper"
-    public static let daemonPlistName = "com.clashbar.helper.plist"
-    public static let helperBundleProgram = "Contents/Library/HelperTools/com.clashbar.helper"
-    public static let allowedClientBundleIdentifier = "com.clashbar"
+    public static let machServiceName = "com.catbar.helper"
+    public static let daemonPlistName = "com.catbar.helper.plist"
+    public static let helperBundleProgram = "Contents/Library/HelperTools/com.catbar.helper"
+    public static let allowedClientBundleIdentifier = "com.catbar"
     public static let allowedClientRequirement = "identifier \"\(allowedClientBundleIdentifier)\""
 }
 

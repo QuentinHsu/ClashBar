@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="${APP_NAME:-ClashBar}"
+APP_NAME="${APP_NAME:-CatBar}"
 TARGET_ARCH="${TARGET_ARCH:-}"
 MIHOMO_REPO="${MIHOMO_REPO:-MetaCubeX/mihomo}"
 MIHOMO_VERSION="${MIHOMO_VERSION:-}"
@@ -11,9 +11,9 @@ REUSE_LOCAL_MIHOMO="${REUSE_LOCAL_MIHOMO:-1}"
 PREPARE_MIHOMO_BINARY="${PREPARE_MIHOMO_BINARY:-1}"
 PREPROCESS_DIR="${PREPROCESS_DIR:-$ROOT/dist/preprocess}"
 
-MIHOMO_RESOURCE_PATH="$ROOT/Sources/ClashBar/Resources/bin/mihomo"
+MIHOMO_RESOURCE_PATH="$ROOT/Sources/CatBar/Resources/bin/mihomo"
 PREPROCESSED_MIHOMO_PATH="$PREPROCESS_DIR/mihomo"
-ICON_SOURCE="$ROOT/Sources/ClashBar/Resources/Assets.xcassets/BrandLogo.imageset/logo.png"
+ICON_SOURCE="$ROOT/Sources/CatBar/Resources/Assets.xcassets/BrandLogo.imageset/logo.png"
 PREPROCESSED_ICON_PATH="$PREPROCESS_DIR/${APP_NAME}.icns"
 MIHOMO_TMP_DIR=""
 
@@ -152,7 +152,7 @@ prepare_icon() {
 
   local iconset_work_dir
   local iconset_dir
-  iconset_work_dir="$(mktemp -d "${TMPDIR:-/tmp}/clashbar.iconset.XXXXXX")"
+  iconset_work_dir="$(mktemp -d "${TMPDIR:-/tmp}/catbar.iconset.XXXXXX")"
   iconset_dir="${iconset_work_dir}.iconset"
   mv "$iconset_work_dir" "$iconset_dir"
 

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.catbar.helper</string>
+    <key>MachServices</key>
+    <dict>
+        <key>com.catbar.helper</key>
+        <true/>
+    </dict>
+    <key>BundleProgram</key>
+    <string>Contents/Library/HelperTools/com.catbar.helper</string>
+</dict>
+</plist>

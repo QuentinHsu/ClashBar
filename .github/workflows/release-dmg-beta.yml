@@ -118,8 +118,8 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: |
-            dist/ClashBar-${{ needs.prepare-beta.outputs.version }}-${{ matrix.dmg_suffix }}.dmg
-            dist/ClashBar-${{ needs.prepare-beta.outputs.version }}-${{ matrix.dmg_suffix }}.dmg.sha256
+            dist/CatBar-${{ needs.prepare-beta.outputs.version }}-${{ matrix.dmg_suffix }}.dmg
+            dist/CatBar-${{ needs.prepare-beta.outputs.version }}-${{ matrix.dmg_suffix }}.dmg.sha256
           if-no-files-found: error
 
   release:
@@ -157,7 +157,7 @@ jobs:
         with:
           tag_name: ${{ needs.prepare-beta.outputs.tag }}
           target_commitish: ${{ needs.prepare-beta.outputs.source_ref }}
-          name: ClashBar ${{ needs.prepare-beta.outputs.version }}
+          name: CatBar ${{ needs.prepare-beta.outputs.version }}
           body_path: release.md
           prerelease: true
           fail_on_unmatched_files: true

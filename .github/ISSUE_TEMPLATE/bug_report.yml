@@ -1,5 +1,5 @@
 name: 错误反馈
-description: '提交 ClashBar Bug'
+description: '提交 CatBar Bug'
 title: '[Bug] '
 labels: ['bug']
 body:
@@ -9,17 +9,17 @@ body:
       label: 验证步骤
       description: 在提交之前，请勾选以下选项以证明您已经阅读并理解了以下要求，否则该 issue 将被关闭。
       options:
-        - label: 我已在 [Issue Tracker](https://github.com/Sitoi/ClashBar/issues) 中搜索过相同或类似问题，没有找到已有记录。
+        - label: 我已在 [Issue Tracker](https://github.com/QuentinHsu/cat-bar/issues) 中搜索过相同或类似问题，没有找到已有记录。
           required: false
-        - label: 应用已放置于 `/Applications/ClashBar.app`，而非直接从 DMG 或其他目录运行（系统代理功能依赖此路径）。
+        - label: 应用已放置于 `/Applications/CatBar.app`，而非直接从 DMG 或其他目录运行（系统代理功能依赖此路径）。
           required: true
         - label: 我同一时间只保留一个 mihomo / Clash 系客户端接管系统代理，已退出 ClashX、Clash Verge、Clash Nyanpasu、Clash Party、FlClash 等同类软件。
           required: true
-        - label: 我已在 **系统设置 → 通用 → 登录项** 中确认 `ClashBar` 后台项目已被允许；若已允许但仍异常，已先手动关闭再重新开启一次。
+        - label: 我已在 **系统设置 → 通用 → 登录项** 中确认 `CatBar` 后台项目已被允许；若已允许但仍异常，已先手动关闭再重新开启一次。
           required: true
         - label: 我已执行 `Restart` 清理运行状态后，重新验证问题仍然存在。
           required: true
-        - label: 我已在 `Logs` 页面将 `log-level` 调整为 `DEBUG`，并提供了 `~/Library/Application Support/clashbar/logs` 下的完整日志。
+        - label: 我已在 `Logs` 页面将 `log-level` 调整为 `DEBUG`，并提供了 `~/Library/Application Support/catbar/logs` 下的完整日志。
           required: true
         - label: 我理解：未附上完整日志的 Issue 将被无条件关闭，不作任何回复。
           required: true
@@ -48,7 +48,7 @@ body:
       required: true
   - type: textarea
     attributes:
-      label: ClashBar 版本
+      label: CatBar 版本
       description: 提供 App 主页右下角的版本号
     validations:
       required: true
