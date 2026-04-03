@@ -246,16 +246,18 @@ extension MenuBarRootView {
                 .layoutPriority(1)
             Spacer(minLength: 0)
             HStack(spacing: 2) {
-                self.proxyCommandActionButton(
-                    title: self.appSession.localProxyCommandHostDisplay(),
-                    target: .local,
-                    helpTitle: tr("ui.quick.copy_terminal"),
-                    helpDetail: localTargetDisplay)
-                {
-                    self.appSession.copyLocalProxyCommand()
+                if !appSession.isRemoteTarget {
+                    self.proxyCommandActionButton(
+                        title: self.appSession.localProxyCommandHostDisplay(),
+                        target: .local,
+                        helpTitle: tr("ui.quick.copy_terminal"),
+                        helpDetail: localTargetDisplay)
+                    {
+                        self.appSession.copyLocalProxyCommand()
+                    }
                 }
 
-                if showManagedTargetAction {
+                if appSession.isRemoteTarget || showManagedTargetAction {
                     self.proxyCommandActionButton(
                         title: self.appSession.managedEndpointProxyCommandHostDisplay(),
                         target: .currentEndpoint,
@@ -268,6 +270,56 @@ extension MenuBarRootView {
             }
         }
         .menuRowPadding(vertical: T.space4)
+    }
+
+    func proxyCommandActionButton(
+        title: String,
+        target: ProxyCommandCopyTarget,
+        helpTitle: String,
+        helpDetail: String,
+        action: @escaping () -> Void) -> some View
+    {
+        let copied = self.copiedProxyCommandTarget == target
+        let foreground = copied
+            ? self.nativePositive.opacity(T.Opacity.solid)
+            : self.nativeSecondaryLabel
+        let iconForeground = copied
+            ? self.nativePositive.opacity(T.Opacity.solid)
+            : self.nativeTertiaryLabel
+
+        return Button {
+            self.handleCopyProxyCommand(target) {
+                action()
+            }
+        } label: {
+            HStack(spacing: T.space4) {
+                Text(title)
+                    .font(.app(size: T.FontSize.caption, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .minimumScaleFactor(T.minimumScale)
+                    .monospacedDigit()
+                    .foregroundStyle(foreground)
+                Image(systemName: copied ? "checkmark.circle.fill" : "doc.on.doc")
+                    .font(.app(size: T.FontSize.caption, weight: .semibold))
+                    .foregroundStyle(iconForeground)
+            }
+            .padding(T.space2)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(copied ? self.nativePositive.opacity(T.Opacity.tint) : self.nativeBadgeFill)
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .stroke(
+                                copied
+                                    ? self.nativePositive.opacity(0.18)
+                                    : self.nativeControlBorder.opacity(0.42),
+                                lineWidth: T.stroke)
+                    }
+            }
+        }
+        .buttonStyle(.plain)
+        .help("\(helpTitle)\n\(helpDetail)")
     }
 
     var systemTabBody: some View {
@@ -335,7 +387,7 @@ extension MenuBarRootView {
                 }
 
                 self.settingsToggleRow(
-                    self.systemProxyRowTitle,
+                    tr("ui.quick.system_proxy"),
                     symbol: "network",
                     isOn: Binding(
                         get: { appSession.isSystemProxyEnabled },
