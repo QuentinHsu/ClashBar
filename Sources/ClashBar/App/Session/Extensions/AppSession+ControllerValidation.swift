@@ -32,7 +32,7 @@ extension AppSession {
         let didChangeController = controller != clientController
         if didChangeController {
             controller = clientController
-            controllerUIURL = makeControllerUIURL(clientController)
+            controllerUIURL = makeControllerUIURL(clientController, secret: controllerSecret)
         }
         if didChangeController || apiClient == nil {
             ensureAPIClient()
@@ -102,6 +102,7 @@ extension AppSession {
         let currentSecret = self.normalizedControllerSecret(controllerSecret)
         if normalizedSecret != currentSecret {
             controllerSecret = normalizedSecret
+            controllerUIURL = makeControllerUIURL(controller, secret: normalizedSecret)
         }
         ensureAPIClient()
     }

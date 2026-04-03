@@ -497,9 +497,9 @@ final class AppSession: ObservableObject {
             self.controller = machine.controllerAddress
             self.controllerSecret = machine.secret
             self.externalControllerDisplay = machine.displayAddress
-            self.controllerUIURL = makeControllerUIURL(machine.controllerAddress)
+            self.controllerUIURL = makeControllerUIURL(machine.controllerAddress, secret: machine.secret)
         } else {
-            self.controllerUIURL = makeControllerUIURL(self.controller)
+            self.controllerUIURL = makeControllerUIURL(self.controller, secret: self.controllerSecret)
         }
         if let persisted = loadPersistedEditableSettingsSnapshot() {
             applyEditableSettingsSnapshotToUI(persisted)
@@ -523,7 +523,7 @@ final class AppSession: ObservableObject {
                             self.controllerSecret = nil
                             self.externalControllerDisplay = fallback
                             self.localExternalControllerDisplay = fallback
-                            self.controllerUIURL = self.makeControllerUIURL(fallback)
+                            self.controllerUIURL = self.makeControllerUIURL(fallback, secret: nil)
                             self.ensureAPIClient()
                         }
                         self.appendLog(level: "warning", message: self.tr(
@@ -531,6 +531,10 @@ final class AppSession: ObservableObject {
                     } else {
                         self.ensureAPIClient()
                         self.statusText = "Running"
+                        self.preserveLocalSettingsOnNextSync = false
+                        self.pendingAppLaunchOverlaySettings = nil
+                        self.lastSyncedEditableSettings = nil
+                        _ = try? await self.fetchRuntimeConfigSnapshot()
                     }
                 }
                 await refreshFromAPI(includeSlowCalls: true)

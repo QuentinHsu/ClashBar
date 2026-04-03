@@ -124,18 +124,12 @@ extension MenuBarRootView {
 
             Spacer(minLength: 0)
 
-            TextField(tr("ui.placeholder.port"), text: text)
-                .textFieldStyle(.roundedBorder)
-                .font(.app(size: T.FontSize.body, weight: .regular))
-                .foregroundStyle(nativePrimaryLabel)
-                .multilineTextAlignment(.trailing)
-                .frame(width: self.settingsPortFieldWidth, alignment: .trailing)
-                .onChange(of: text.wrappedValue) { _ in
-                    appSession.scheduleProxyPortsAutoSaveIfNeeded()
-                }
-                .onSubmit {
-                    Task { await appSession.applyProxyPorts(autoSaved: true) }
-                }
+            SettingsPortTextField(placeholder: tr("ui.placeholder.port"), text: text) {
+                appSession.scheduleProxyPortsAutoSaveIfNeeded()
+            } onSubmit: {
+                Task { await appSession.applyProxyPorts(autoSaved: true) }
+            }
+            .frame(width: self.settingsPortFieldWidth, alignment: .trailing)
         }
     }
 
@@ -278,36 +272,6 @@ extension MenuBarRootView {
 
     var systemTabBody: some View {
         let isRemote = appSession.isRemoteTarget
-        let proxyPortFields: [(titleKey: String, symbol: String, text: Binding<String>)] = [
-            ("ui.settings.port.port", "network", $appSession.settingsPort),
-            ("ui.settings.port.socks", "wave.3.right", $appSession.settingsSocksPort),
-            ("ui.settings.port.mixed", "arrow.triangle.merge", $appSession.settingsMixedPort),
-            ("ui.settings.port.redir", "arrowshape.turn.up.right", $appSession.settingsRedirPort),
-            ("ui.settings.port.tproxy", "shield.lefthalf.filled", $appSession.settingsTProxyPort),
-        ]
-        let localOnlyItems: [(id: String, title: String, symbol: String, isOn: Binding<Bool>)] = [
-            (
-                "launch-at-login",
-                tr("ui.settings.launch_at_login"),
-                "person.crop.circle.badge.checkmark",
-                Binding(
-                    get: { appSession.launchAtLoginEnabled },
-                    set: { appSession.applyLaunchAtLogin($0) })),
-            (
-                "auto-start-core",
-                tr("ui.settings.auto_start_core"),
-                "power.circle",
-                Binding(
-                    get: { appSession.autoStartCoreEnabled },
-                    set: { appSession.autoStartCoreEnabled = $0 })),
-            (
-                "auto-core-network-recovery",
-                tr("ui.settings.auto_core_network_recovery"),
-                "network.badge.shield.half.filled",
-                Binding(
-                    get: { appSession.autoManageCoreOnNetworkChangeEnabled },
-                    set: { appSession.autoManageCoreOnNetworkChangeEnabled = $0 })),
-        ]
         let coreToggleItems: [(id: String, title: String, symbol: String, isOn: Binding<Bool>)] = [
             (
                 AppSession.EditableCoreSetting.allowLan.id,
@@ -332,22 +296,13 @@ extension MenuBarRootView {
         let selectedLogLevel = appSession.stringValue(for: .logLevel)
 
         return VStack(alignment: .leading, spacing: T.space6) {
+            // MARK: - Proxy Control
             VStack(spacing: 0) {
                 self.settingsCardHeader(
                     tr("ui.section.proxy_control"),
                     symbol: "antenna.radiowaves.left.and.right")
 
-                if isRemote {
-                    HStack(spacing: T.space8) {
-                        self.settingsRowLabel(symbol: "doc.text", title: tr("ui.quick.switch_config"))
-                            .layoutPriority(1)
-                        Spacer(minLength: 0)
-                        Text(tr("ui.machine.remote_readonly"))
-                            .font(.app(size: T.FontSize.caption, weight: .regular))
-                            .foregroundStyle(nativeTertiaryLabel)
-                    }
-                    .menuRowPadding(vertical: T.space4)
-                } else {
+                if !isRemote {
                     HStack(spacing: T.space8) {
                         self.settingsRowLabel(symbol: "doc.text", title: tr("ui.quick.switch_config"))
                             .layoutPriority(1)
@@ -402,16 +357,35 @@ extension MenuBarRootView {
                 self.settingsCopyProxyCommandRow
             }
 
+            // MARK: - App Settings
             VStack(spacing: 0) {
                 self.settingsCardHeader(
-                    tr("ui.section.basic_settings"),
+                    tr("ui.section.app_settings"),
                     symbol: "slider.horizontal.3")
-                ForEach(localOnlyItems, id: \.id) { item in
+
+                self.settingsToggleRow(
+                    tr("ui.settings.launch_at_login"),
+                    symbol: "person.crop.circle.badge.checkmark",
+                    isOn: Binding(
+                        get: { appSession.launchAtLoginEnabled },
+                        set: { appSession.applyLaunchAtLogin($0) }))
+
+                if !isRemote {
                     self.settingsToggleRow(
-                        item.title,
-                        symbol: item.symbol,
-                        isOn: item.isOn)
+                        tr("ui.settings.auto_start_core"),
+                        symbol: "power.circle",
+                        isOn: Binding(
+                            get: { appSession.autoStartCoreEnabled },
+                            set: { appSession.autoStartCoreEnabled = $0 }))
+
+                    self.settingsToggleRow(
+                        tr("ui.settings.auto_core_network_recovery"),
+                        symbol: "network.badge.shield.half.filled",
+                        isOn: Binding(
+                            get: { appSession.autoManageCoreOnNetworkChangeEnabled },
+                            set: { appSession.autoManageCoreOnNetworkChangeEnabled = $0 }))
                 }
+
                 self.settingsSelectionRow(.init(
                     title: tr("ui.settings.menu_bar_style"),
                     symbol: "menubar.rectangle",
@@ -436,6 +410,20 @@ extension MenuBarRootView {
                     optionTitle: self.appearanceModeLabel,
                     isSelected: { appSession.appearanceMode == $0 },
                     onSelect: appSession.setAppearanceMode))
+            }
+
+            // MARK: - Core Settings (includes Log Level)
+            VStack(spacing: 0) {
+                self.settingsCardHeader(
+                    tr("ui.section.core_settings"),
+                    symbol: "gearshape.2")
+                ForEach(coreToggleItems, id: \.id) { item in
+                    self.settingsToggleRow(
+                        item.title,
+                        symbol: item.symbol,
+                        isOn: item.isOn,
+                        isDisabled: appSession.isCoreSettingSyncing)
+                }
                 self.settingsSelectionRow(.init(
                     title: tr("ui.settings.log_level"),
                     symbol: "text.alignleft",
@@ -448,35 +436,47 @@ extension MenuBarRootView {
                     }))
             }
 
-            VStack(spacing: 0) {
-                self.settingsCardHeader(
-                    tr("ui.section.core_settings"),
-                    symbol: "gearshape.2")
-                ForEach(coreToggleItems, id: \.id) { item in
-                    self.settingsToggleRow(
-                        item.title,
-                        symbol: item.symbol,
-                        isOn: item.isOn,
-                        isDisabled: appSession.isCoreSettingSyncing)
-                }
-            }
-
+            // MARK: - Proxy Ports
             VStack(spacing: 0) {
                 self.settingsCardHeader(
                     tr("ui.section.proxy_ports"),
                     symbol: "point.3.connected.trianglepath.dotted")
+                    .overlay(alignment: .trailing) {
+                        if isRemote {
+                            Text(tr("ui.machine.remote_readonly"))
+                                .font(.app(size: T.FontSize.caption, weight: .regular))
+                                .foregroundStyle(nativeTertiaryLabel)
+                                .padding(.trailing, T.space8)
+                        }
+                    }
 
                 VStack(alignment: .leading, spacing: T.space4) {
-                    ForEach(proxyPortFields, id: \.titleKey) { item in
-                        self.settingsPortFieldRow(
-                            tr(item.titleKey),
-                            symbol: item.symbol,
-                            text: item.text)
-                    }
+                    self.settingsPortFieldRow(
+                        tr("ui.settings.port.port"),
+                        symbol: "network",
+                        text: $appSession.settingsPort)
+                    self.settingsPortFieldRow(
+                        tr("ui.settings.port.socks"),
+                        symbol: "wave.3.right",
+                        text: $appSession.settingsSocksPort)
+                    self.settingsPortFieldRow(
+                        tr("ui.settings.port.mixed"),
+                        symbol: "arrow.triangle.merge",
+                        text: $appSession.settingsMixedPort)
+                    self.settingsPortFieldRow(
+                        tr("ui.settings.port.redir"),
+                        symbol: "arrowshape.turn.up.right",
+                        text: $appSession.settingsRedirPort)
+                    self.settingsPortFieldRow(
+                        tr("ui.settings.port.tproxy"),
+                        symbol: "shield.lefthalf.filled",
+                        text: $appSession.settingsTProxyPort)
                 }
                 .menuRowPadding(vertical: T.space4)
+                .disabled(isRemote)
             }
 
+            // MARK: - Maintenance
             VStack(spacing: 0) {
                 self.settingsCardHeader(
                     tr("ui.section.maintenance"),

@@ -29,7 +29,7 @@ extension AppSession {
                 self.controllerSecret = nil
                 self.externalControllerDisplay = fallback
                 self.localExternalControllerDisplay = fallback
-                self.controllerUIURL = self.makeControllerUIURL(fallback)
+                self.controllerUIURL = self.makeControllerUIURL(fallback, secret: nil)
                 self.ensureAPIClient()
             }
 
@@ -47,7 +47,7 @@ extension AppSession {
             self.controller = machine.controllerAddress
             self.controllerSecret = machine.secret
             self.externalControllerDisplay = machine.displayAddress
-            self.controllerUIURL = self.makeControllerUIURL(machine.controllerAddress)
+            self.controllerUIURL = self.makeControllerUIURL(machine.controllerAddress, secret: machine.secret)
             self.ensureAPIClient()
             self.lastSyncedEditableSettings = nil
             self.preserveLocalSettingsOnNextSync = false

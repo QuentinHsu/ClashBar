@@ -65,7 +65,7 @@
 "ui.machine.field.host" = "主机地址";
 "ui.machine.field.port" = "端口";
 "ui.machine.field.secret" = "密钥";
-"ui.machine.remote_readonly" = "(远程连接不可变更)";
+"ui.machine.remote_readonly" = "远程连接不可变更";
 "ui.machine.return_local" = "返回本地内核";
 "ui.machine.active" = "当前";
 "ui.machine.local_label" = "本地";
@@ -75,7 +75,6 @@
 "ui.section.proxy_control" = "代理控制";
 "ui.section.local_app_settings" = "应用设置 (本地)";
 "ui.section.core_settings" = "内核设置";
-"ui.section.core_settings_remote" = "内核设置 (远程)";
 
 "ui.quick.switch_config" = "切换配置";
 "ui.quick.system_proxy" = "系统代理";
@@ -100,6 +99,7 @@
 "ui.section.remote_nodes" = "远程节点";
 "ui.section.local_nodes" = "本地节点";
 "ui.section.basic_settings" = "基础设置";
+"ui.section.app_settings" = "应用设置";
 "ui.section.proxy_ports" = "代理端口";
 "ui.section.maintenance" = "系统维护";
 

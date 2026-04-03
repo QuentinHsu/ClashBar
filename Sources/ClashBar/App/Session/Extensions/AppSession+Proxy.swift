@@ -1,3 +1,5 @@
+import Foundation
+
 @MainActor
 extension AppSession {
     private func proxyRuntimeConfigRepository(using transport: any MihomoAPITransporting) -> RuntimeConfigRepository {
@@ -225,7 +227,32 @@ extension AppSession {
         return "\(trimmedHost):\(port)"
     }
 
-    func makeControllerUIURL(_ controller: String) -> String {
-        "\(normalizedControllerAddress(controller))/ui"
+    func makeControllerUIURL(_ controller: String, secret: String? = nil) -> String {
+        let base = "\(normalizedControllerAddress(controller))/ui"
+        guard let url = URL(string: normalizedControllerAddress(controller)),
+              var components = URLComponents(string: base) else {
+            return base
+        }
+
+        var queryItems: [URLQueryItem] = []
+        if let host = url.host {
+            queryItems.append(URLQueryItem(name: "host", value: host))
+            queryItems.append(URLQueryItem(name: "hostname", value: host))
+        }
+        if let port = url.port {
+            queryItems.append(URLQueryItem(name: "port", value: "\(port)"))
+        } else if let scheme = url.scheme {
+            queryItems.append(URLQueryItem(name: "port", value: scheme == "https" ? "443" : "80"))
+        }
+
+        if let secret = secret, !secret.isEmpty {
+            queryItems.append(URLQueryItem(name: "secret", value: secret))
+        }
+
+        if !queryItems.isEmpty {
+            components.queryItems = queryItems
+            return components.string ?? base
+        }
+        return base
     }
 }

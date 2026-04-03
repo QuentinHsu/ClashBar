@@ -207,13 +207,18 @@ extension AppSession {
 
     func applyPendingAppLaunchSettingsOverlayIfNeeded(syncSystemProxyPort: Bool = true) async {
         guard let overlay = pendingAppLaunchOverlaySettings else { return }
-        guard apiStatus == .healthy else { return }
         pendingAppLaunchOverlaySettings = nil
-        _ = await self.applyEditableSettingsOverlay(
-            overlay,
-            syncingKey: "app-launch-overlay",
-            successMessage: "",
-            syncSystemProxyPort: syncSystemProxyPort)
+        
+        if await self.isCoreAPIReachableForOverlaySync() {
+            _ = await self.applyEditableSettingsOverlay(
+                overlay,
+                syncingKey: "app-launch-overlay",
+                successMessage: "",
+                syncSystemProxyPort: syncSystemProxyPort)
+        } else {
+            self.deferredEditableSettingsOverlay = (snapshot: overlay, syncingKey: "app-launch-overlay")
+            self.scheduleDeferredEditableSettingsOverlaySync()
+        }
     }
 
     func syncEditableSettingsOverlayForCoreBootstrap(
