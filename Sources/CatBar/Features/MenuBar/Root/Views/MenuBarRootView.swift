@@ -78,6 +78,7 @@ struct MenuBarRootView: View {
     @Environment(\.colorScheme) var colorScheme
 
     @StateObject var rootViewModel = MenuBarRootViewModel()
+    @StateObject var nodesViewModel = NodesTabViewModel()
     @StateObject var connectionsViewModel = ConnectionsTabViewModel()
     @StateObject var logsViewModel = LogsTabViewModel()
     @StateObject var rulesViewModel = RulesTabViewModel()

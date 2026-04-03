@@ -343,8 +343,9 @@ extension AppSession {
         pendingConfigSwitchOverlaySettings = currentEditableSettingsSnapshot()
         preserveLocalSettingsOnNextSync = true
         proxyGroups = []
-        groupLatencies = [:]
+        clearMeasuredProxyDelays()
         proxyNodeTypes = [:]
+        proxyNodeIDs = [:]
         groupLatencyLoading = []
         appendLog(level: "info", message: tr("log.config.changed_restart"))
         cancelProviderRefresh(reason: "config switch requested")

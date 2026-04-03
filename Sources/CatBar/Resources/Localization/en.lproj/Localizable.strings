@@ -113,6 +113,8 @@
 "ui.empty.proxy_groups" = "No proxy groups loaded";
 "ui.empty.remote_nodes" = "No remote nodes";
 "ui.empty.local_nodes" = "No local nodes";
+"ui.nodes.search_placeholder" = "Search nodes";
+"ui.nodes.no_match" = "No matching nodes";
 "ui.empty.rules" = "No rules data";
 "ui.empty.connections" = "No active connections";
 "ui.empty.logs" = "No logs";

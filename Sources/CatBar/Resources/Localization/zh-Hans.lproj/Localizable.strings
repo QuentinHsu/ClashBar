@@ -113,6 +113,8 @@
 "ui.empty.proxy_groups" = "暂无代理组";
 "ui.empty.remote_nodes" = "暂无远程节点";
 "ui.empty.local_nodes" = "暂无本地节点";
+"ui.nodes.search_placeholder" = "搜索节点";
+"ui.nodes.no_match" = "没有匹配的节点";
 "ui.empty.rules" = "暂无规则数据";
 "ui.empty.connections" = "暂无活动连接";
 "ui.empty.logs" = "暂无日志";

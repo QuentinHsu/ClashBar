@@ -5,121 +5,342 @@ private typealias T = MenuBarLayoutTokens
 
 extension MenuBarRootView {
     var nodesTabBody: some View {
-        VStack(alignment: .leading, spacing: T.space6) {
-            remoteNodesSection
-            localNodesSection
+        MeasurementAwareVStack(alignment: .leading, spacing: T.space6) {
+            self.nodesSearchBar
+            self.remoteNodesSection
+            self.nodesLocalSection()
         }
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    // MARK: - Remote Nodes (Proxy Providers)
+    private var nodesSearchBar: some View {
+        HStack(spacing: T.space4) {
+            TextField(tr("ui.nodes.search_placeholder"), text: $nodesViewModel.searchText)
+                .font(.app(size: T.FontSize.body, weight: .regular))
+                .textFieldStyle(.plain)
+                .foregroundStyle(nativePrimaryLabel)
+
+            if !nodesViewModel.searchText.isEmpty {
+                Button {
+                    nodesViewModel.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(nativeTertiaryLabel)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, T.space6)
+        .padding(.vertical, T.space4)
+        .background(
+            RoundedRectangle(cornerRadius: T.cornerRadius, style: .continuous)
+                .fill(nativeControlFill.opacity(isDarkAppearance ? 0.54 : 0.38))
+                .overlay {
+                    RoundedRectangle(cornerRadius: T.cornerRadius, style: .continuous)
+                        .stroke(
+                            nativeControlBorder.opacity(isDarkAppearance ? 0.40 : 0.12),
+                            lineWidth: T.stroke)
+                })
+        .padding(.horizontal, T.space4)
+    }
 
     private var remoteNodesSection: some View {
         let providers = appSession.sortedProxyProviderNames
 
-        return VStack(alignment: .leading, spacing: T.space6) {
+        return MeasurementAwareVStack(alignment: .leading, spacing: T.space6) {
             self.nodesSectionHeader(
                 tr("ui.section.remote_nodes"),
                 count: "\(providers.count)")
+            {
+                self.nodesProvidersRefreshButton
+            }
 
             if providers.isEmpty {
                 emptyCard(tr("ui.empty.remote_nodes"))
             } else {
-                VStack(spacing: T.space2) {
+                MeasurementAwareVStack(alignment: .leading, spacing: T.space2) {
                     ForEach(providers, id: \.self) { name in
-                        self.proxyProviderRow(name: name, detail: appSession.proxyProvidersDetail[name])
+                        self.nodesProviderBlock(name: name, detail: appSession.proxyProvidersDetail[name])
                     }
                 }
             }
         }
     }
 
-    // MARK: - Local Nodes
+    private func nodesProviderBlock(name: String, detail: ProviderDetail?) -> some View {
+        let isExpanded = nodesViewModel.expandedProviders.contains(name)
+        let nodeCount = detail?.proxies?.count ?? 0
+        let isUpdating = appSession.providerUpdating.contains(name)
+        let updatedText = ValueFormatter.dateTimeFromISO(detail?.updatedAt)
 
-    private var localNodesSection: some View {
-        let localNodes = self.computeLocalNodes()
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: T.space4) {
+                Button {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        nodesViewModel.toggleProvider(name)
+                    }
+                } label: {
+                    HStack(spacing: T.space6) {
+                        Text(name)
+                            .font(.app(size: T.FontSize.body, weight: .semibold))
+                            .foregroundStyle(nativePrimaryLabel)
+                            .lineLimit(1)
 
-        return VStack(alignment: .leading, spacing: T.space6) {
+                        Text("\(nodeCount)")
+                            .font(.app(size: T.FontSize.caption, weight: .semibold))
+                            .foregroundStyle(nativeSecondaryLabel)
+                            .padding(.horizontal, T.space4)
+                            .padding(.vertical, T.space1)
+                            .background(nativeBadgeCapsule())
+
+                        Spacer(minLength: 0)
+
+                        Text(updatedText)
+                            .font(.app(size: T.FontSize.caption, weight: .regular))
+                            .foregroundStyle(nativeTertiaryLabel)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Group {
+                    if isUpdating {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon)
+
+                Button {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        nodesViewModel.toggleProvider(name)
+                    }
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(nativeTertiaryLabel)
+                        .frame(width: T.rowLeadingIcon, alignment: .trailing)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, T.space4)
+            .padding(.vertical, T.space6)
+            .contentShape(Rectangle())
+            .contextMenu {
+                Button(tr("ui.action.refresh")) {
+                    Task { await appSession.updateProxyProvider(name: name) }
+                }
+            }
+
+            if isExpanded {
+                self.nodesProviderExpandedContent(providerName: name, detail: detail)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: T.cornerRadius, style: .continuous)
+                .fill(nativeControlFill.opacity(isDarkAppearance ? 0.24 : 0.18)))
+    }
+
+    private func nodesProviderExpandedContent(providerName: String, detail: ProviderDetail?) -> some View {
+        let allNodes = detail?.proxies ?? []
+        let filtered = nodesViewModel.filteredProviderNodes(allNodes, searchText: nodesViewModel.searchText)
+
+        return VStack(spacing: 0) {
+            Divider()
+                .overlay(nativeSeparator)
+                .padding(.horizontal, T.space4)
+
+            if filtered.isEmpty {
+                Text(nodesViewModel.searchText.isEmpty ? tr("ui.common.na") : tr("ui.nodes.no_match"))
+                    .font(.app(size: T.FontSize.caption, weight: .regular))
+                    .foregroundStyle(nativeSecondaryLabel)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, T.space6)
+                    .padding(.vertical, T.space4)
+            } else {
+                MeasurementAwareVStack(alignment: .leading, spacing: 0) {
+                    ForEach(filtered, id: \.stableIdentity) { node in
+                        self.nodesProviderNodeRow(
+                            providerName: providerName,
+                            node: node,
+                            testUrl: detail?.testUrl,
+                            timeout: detail?.timeout)
+                    }
+                }
+                .padding(.vertical, T.space2)
+            }
+        }
+    }
+
+    private func nodesProviderNodeRow(
+        providerName _: String,
+        node: ProviderProxyNode,
+        testUrl: String?,
+        timeout: Int?) -> some View
+    {
+        let isTesting = nodesViewModel.nodeTestingInProgress.contains(node.name)
+        let delay = appSession.latestDelay(for: node.name, nodeID: node.id) ?? node.latestDelay
+        let delayText = self.nodeDelayText(delay)
+        let delayColor = latencyColor(delay)
+        let nodeType = node.type?.trimmedNonEmpty ?? appSession.proxyNodeTypes[node.name]
+
+        return NodesNodeRow(
+            name: node.name,
+            typeText: nodeType,
+            delayText: delayText,
+            delayColor: delayColor,
+            isTesting: isTesting)
+        {
+            await self.testNodeLatency(nodeName: node.name, testUrl: testUrl, timeout: timeout)
+        }
+    }
+
+    func nodesLocalSection() -> some View {
+        let allLocal = nodesViewModel.buildLocalNodes(
+            proxyNodeIDs: appSession.proxyNodeIDs,
+            proxyNodeTypes: appSession.proxyNodeTypes,
+            proxyProvidersDetail: appSession.proxyProvidersDetail)
+        let filtered = nodesViewModel.filteredLocalNodes(allLocal, searchText: nodesViewModel.searchText)
+
+        return MeasurementAwareVStack(alignment: .leading, spacing: T.space6) {
             self.nodesSectionHeader(
                 tr("ui.section.local_nodes"),
-                count: "\(localNodes.count)")
+                count: "\(filtered.count)")
 
-            if localNodes.isEmpty {
-                emptyCard(tr("ui.empty.local_nodes"))
+            if filtered.isEmpty {
+                emptyCard(
+                    nodesViewModel.searchText.isEmpty
+                        ? tr("ui.empty.local_nodes")
+                        : tr("ui.nodes.no_match"))
             } else {
-                VStack(spacing: T.space2) {
-                    ForEach(localNodes, id: \.name) { node in
-                        self.localNodeRow(node)
+                MeasurementAwareVStack(alignment: .leading, spacing: 0) {
+                    ForEach(filtered, id: \.stableIdentity) { node in
+                        self.nodesLocalNodeRow(node)
                     }
                 }
             }
         }
     }
 
-    private static let builtinProxyNames: Set<String> = [
-        "DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE",
-    ]
+    private func nodesLocalNodeRow(_ node: NodesTabViewModel.LocalNode) -> some View {
+        let isTesting = nodesViewModel.nodeTestingInProgress.contains(node.name)
+        let delay = appSession.latestDelay(for: node.name, nodeID: node.id)
+        let delayText = self.nodeDelayText(delay)
+        let delayColor = latencyColor(delay)
 
-    private func computeLocalNodes() -> [LocalNodeItem] {
-        let providerNodeNames: Set<String> = {
-            var names = Set<String>()
-            for detail in appSession.proxyProvidersDetail.values {
-                if let proxies = detail.proxies {
-                    for proxy in proxies {
-                        names.insert(proxy.name)
-                    }
-                }
-            }
-            return names
-        }()
-
-        return appSession.proxyNodeTypes
-            .filter { !providerNodeNames.contains($0.key) && !Self.builtinProxyNames.contains($0.key.uppercased()) }
-            .map { LocalNodeItem(name: $0.key, type: $0.value) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return NodesNodeRow(
+            name: node.name,
+            typeText: node.type,
+            delayText: delayText,
+            delayColor: delayColor,
+            isTesting: isTesting)
+        {
+            await self.testNodeLatency(nodeName: node.name, testUrl: nil, timeout: nil)
+        }
     }
 
-    private func localNodeRow(_ node: LocalNodeItem) -> some View {
-        let delayValue = appSession.proxyHistoryLatestDelay[node.name]
-        let delayText: String = {
-            guard let value = delayValue, value > 0 else { return "-" }
-            return "\(value) ms"
-        }()
-        let hovered = hoveredLocalNodeName == node.name
+    private func testNodeLatency(nodeName: String, testUrl: String?, timeout: Int?) async {
+        guard !nodesViewModel.nodeTestingInProgress.contains(nodeName) else { return }
+        nodesViewModel.nodeTestingInProgress.insert(nodeName)
+        defer { nodesViewModel.nodeTestingInProgress.remove(nodeName) }
 
-        return HStack(alignment: .center, spacing: T.space6) {
-            VStack(alignment: .leading, spacing: T.space1) {
-                Text(node.name)
-                    .font(.app(size: T.FontSize.body, weight: .semibold))
-                    .foregroundStyle(nativePrimaryLabel)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        _ = await appSession.testSingleNodeLatency(
+            nodeName: nodeName,
+            testURL: testUrl,
+            timeout: timeout)
+    }
 
-            Text(node.type)
-                .font(.app(size: T.FontSize.caption, weight: .medium))
-                .foregroundStyle(nativeSecondaryLabel)
-                .padding(.horizontal, T.space4)
-                .padding(.vertical, T.space1)
-                .background(nativeBadgeCapsule())
-
-            Text(delayText)
-                .font(.app(size: T.FontSize.caption, weight: .regular))
-                .foregroundStyle(latencyColor(delayValue))
-                .frame(width: 56, alignment: .trailing)
+    private var nodesProvidersRefreshButton: some View {
+        self.compactTopIcon(
+            "arrow.triangle.2.circlepath",
+            label: tr("ui.action.refresh"),
+            toneOverride: nativeInfo,
+            isLoading: appSession.isProxyProvidersRefreshing)
+        {
+            await appSession.refreshProxyProviders()
         }
-        .padding(.horizontal, T.space4)
-        .padding(.vertical, T.space6)
-        .background(nativeHoverRowBackground(hovered))
-        .onHover { hoveredLocalNodeName = self.nextHovered(
-            current: hoveredLocalNodeName,
-            target: node.name,
-            isHovering: $0) }
+        .help(tr("ui.action.refresh"))
+        .opacity(appSession.isProxyProvidersRefreshing ? 0.6 : 1)
+    }
+
+    func nodeDelayText(_ value: Int?) -> String {
+        guard let value else { return tr("ui.common.unknown") }
+        if value == 0 { return tr("ui.common.timeout") }
+        return tr("ui.common.latency_ms", value)
     }
 }
 
-struct LocalNodeItem: Equatable {
+private struct NodesNodeRow: View {
     let name: String
-    let type: String
+    let typeText: String?
+    let delayText: String
+    let delayColor: Color
+    let isTesting: Bool
+    let onTest: () async -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: T.space4) {
+            Text(self.name)
+                .font(.app(size: T.FontSize.body, weight: .medium))
+                .foregroundStyle(Color(nsColor: .labelColor))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .minimumScaleFactor(T.minimumScale)
+
+            Spacer(minLength: 0)
+
+            if let typeText = self.typeText {
+                Text(typeText)
+                    .font(.app(size: T.FontSize.caption, weight: .medium))
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, T.space4)
+                    .padding(.vertical, T.space1)
+                    .background(
+                        RoundedRectangle(cornerRadius: T.cornerRadius, style: .continuous)
+                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.1)))
+            }
+
+            Group {
+                if self.isTesting {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Text(self.delayText)
+                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(self.delayColor)
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: 50, alignment: .trailing)
+
+            Button {
+                Task { await self.onTest() }
+            } label: {
+                Image(systemName: "bolt.horizontal")
+                    .font(.app(size: T.FontSize.caption, weight: .semibold))
+                    .foregroundStyle(
+                        self.isHovered
+                            ? Color(nsColor: .systemTeal).opacity(T.Opacity.solid)
+                            : Color(nsColor: .secondaryLabelColor))
+                    .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon)
+            }
+            .buttonStyle(.borderless)
+            .disabled(self.isTesting)
+            .onHover { self.isHovered = $0 }
+            .help("Test Latency")
+        }
+        .frame(height: T.compactRowHeight)
+        .padding(.horizontal, T.space6)
+        .padding(.vertical, T.space1)
+    }
 }

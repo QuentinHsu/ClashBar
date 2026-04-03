@@ -14,6 +14,10 @@ extension AppSession {
         self.resetTrafficPresentation()
         self.clearAllLogs()
         self.proxyGroups = []
+        self.proxyGroupIndex = [:]
+        self.clearMeasuredProxyDelays()
+        self.proxyNodeTypes = [:]
+        self.proxyNodeIDs = [:]
         self.ruleItems = []
         self.connectionsStore.connections = []
         self.connectionsStore.connectionsCount = 0

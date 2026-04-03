@@ -5,10 +5,13 @@ struct ProxyGroupsResponse: Decodable, Equatable {
 }
 
 struct ProxyGroup: Decodable, Equatable {
+    let id: String?
     let name: String
     let type: String?
     let now: String?
     let all: [String]
+    let providerName: String?
+    let alive: Bool?
     let testUrl: String?
     let timeout: Int?
     let icon: String?
@@ -16,20 +19,26 @@ struct ProxyGroup: Decodable, Equatable {
     let latestDelay: Int?
 
     init(
+        id: String? = nil,
         name: String,
         type: String? = nil,
         now: String? = nil,
         all: [String],
+        providerName: String? = nil,
+        alive: Bool? = nil,
         testUrl: String? = nil,
         timeout: Int? = nil,
         icon: String? = nil,
         hidden: Bool? = nil,
         latestDelay: Int? = nil)
     {
+        self.id = id?.trimmedNonEmpty
         self.name = name
         self.type = type
         self.now = now
         self.all = all
+        self.providerName = providerName?.trimmedNonEmpty
+        self.alive = alive
         self.testUrl = testUrl.trimmedNonEmpty
         self.timeout = timeout.positiveOrNil
         self.icon = icon.trimmedNonEmpty
@@ -38,10 +47,13 @@ struct ProxyGroup: Decodable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case id
         case name
         case type
         case now
         case all
+        case providerName = "provider-name"
+        case alive
         case testUrl
         case timeout
         case icon
@@ -51,10 +63,13 @@ struct ProxyGroup: Decodable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id).trimmedNonEmpty
         self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Unknown"
         self.type = try container.decodeIfPresent(String.self, forKey: .type)
         self.now = try container.decodeIfPresent(String.self, forKey: .now)
         self.all = try container.decodeIfPresent([String].self, forKey: .all) ?? []
+        self.providerName = try container.decodeIfPresent(String.self, forKey: .providerName).trimmedNonEmpty
+        self.alive = try container.decodeIfPresent(Bool.self, forKey: .alive)
         self.testUrl = try container.decodeIfPresent(String.self, forKey: .testUrl).trimmedNonEmpty
         self.timeout = container.decodeFlexibleInt(forKey: .timeout).positiveOrNil
         self.icon = try container.decodeIfPresent(String.self, forKey: .icon).trimmedNonEmpty

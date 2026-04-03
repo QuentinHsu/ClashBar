@@ -78,3 +78,20 @@ struct GroupDelayMeasurement: Codable, Equatable {
         self.values = (try? container.decode([String: Int].self)) ?? [:]
     }
 }
+
+struct NodeDelayMeasurement: Decodable, Equatable {
+    let delay: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case delay
+    }
+
+    init(delay: Int) {
+        self.delay = delay
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.delay = (try? container.decode(Int.self, forKey: .delay)) ?? 0
+    }
+}

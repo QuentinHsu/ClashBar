@@ -62,6 +62,34 @@ extension AppSession {
         await self.refreshProvidersAndRules()
     }
 
+    func refreshProxyProviders() async {
+        guard !isProxyProvidersRefreshing else { return }
+        isProxyProvidersRefreshing = true
+        defer { isProxyProvidersRefreshing = false }
+
+        do {
+            let summary = try await self.providersRepository().fetchProxyProviders()
+            let names = summary.providers.keys.sorted()
+            let insertedNames = Set(names).subtracting(self.providerUpdating)
+            self.providerUpdating.formUnion(insertedNames)
+            defer { self.providerUpdating.subtract(insertedNames) }
+
+            _ = await self.updateProvidersSequential(
+                names: names,
+                operation: { name in
+                    try await self.updateProxyProviderUseCase().execute(name: name)
+                },
+                onError: { name, error in
+                    tr("log.providers.proxy_update_failed", name, error.localizedDescription)
+                })
+        } catch {
+            appendLog(level: "error", message: tr("log.providers.fetch_proxy_failed", error.localizedDescription))
+            return
+        }
+
+        await self.refreshProvidersAndRules()
+    }
+
     func updateProxyProvider(name: String) async {
         guard !providerUpdating.contains(name) else { return }
         providerUpdating.insert(name)
@@ -79,7 +107,13 @@ extension AppSession {
         incoming: ProviderDetail) -> ProviderDetail
     {
         let fallbackNodes = incoming.proxies?.map {
-            ProviderProxyNode(name: $0.name, latestDelay: $0.latestDelay)
+            ProviderProxyNode(
+                id: $0.id,
+                name: $0.name,
+                type: $0.type,
+                alive: $0.alive,
+                providerName: $0.providerName,
+                latestDelay: $0.latestDelay)
         }
         return incoming.with(proxies: previous?.proxies ?? fallbackNodes)
     }

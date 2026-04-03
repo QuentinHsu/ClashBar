@@ -141,7 +141,7 @@ extension MenuBarRootView {
 
         var symbol: String {
             switch self {
-            case .healthcheck: "gauge.with.dots.needle.50percent"
+            case .healthcheck: "bolt.horizontal"
             case .refresh: "arrow.triangle.2.circlepath"
             }
         }
@@ -169,6 +169,18 @@ extension MenuBarRootView {
             fontSize: T.FontSize.caption,
             hierarchicalSymbol: true,
             action: action)
+    }
+
+    @ViewBuilder
+    func providerUpdateStatusIndicator(isLoading: Bool) -> some View {
+        if isLoading {
+            ProgressView()
+                .controlSize(.mini)
+                .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon, alignment: .center)
+        } else {
+            Color.clear
+                .frame(width: T.rowLeadingIcon, height: T.rowLeadingIcon)
+        }
     }
 
     var proxyGroupsSection: some View {
@@ -215,7 +227,7 @@ extension MenuBarRootView {
                                 : "ui.action.hide_hidden_proxy_groups"))
 
                     self.compactTopIcon(
-                        "gauge",
+                        "bolt.horizontal",
                         label: tr("ui.action.test_latency"),
                         toneOverride: nativeTeal)
                     {
@@ -239,14 +251,8 @@ extension MenuBarRootView {
 
     func proxyGroupInlineRow(_ group: ProxyGroup) -> some View {
         let currentNode = group.now ?? tr("ui.common.na")
-        let delayText = appSession.delayText(
-            group: group.name,
-            node: currentNode,
-            fallbackToGroupHistory: true)
-        let delayValue = appSession.delayValue(
-            group: group.name,
-            node: currentNode,
-            fallbackToGroupHistory: true)
+        let delayText = appSession.groupDisplayDelayText(group)
+        let delayValue = appSession.groupDisplayDelayValue(group)
         let nodeCount = group.all.count
         let iconURL = self.proxyGroupIconURL(group)
         let hasLeadingIcon = iconURL != nil
@@ -291,7 +297,7 @@ extension MenuBarRootView {
 
                     self.providerActionButton(
                         .healthcheck,
-                        isLoading: appSession.groupLatencyLoading.contains(group.name))
+                        isLoading: appSession.isLatencyTesting(group: group))
                     {
                         await appSession.refreshGroupLatency(group)
                     }
@@ -313,6 +319,14 @@ extension MenuBarRootView {
                 if let iconURL {
                     self.proxyGroupLeadingIcon(iconURL)
                 }
+            } trailing: {
+                self.providerActionButton(
+                    .healthcheck,
+                    isLoading: appSession.isLatencyTesting(group: group))
+                {
+                    await appSession.refreshGroupLatency(group)
+                }
+                .frame(width: 18, alignment: .center)
             }
 
             let nodes = sortGroupNodesByLatency
@@ -325,11 +339,17 @@ extension MenuBarRootView {
                     delayText: appSession.delayText(group: group.name, node: node),
                     delayValue: appSession.delayValue(group: group.name, node: node),
                     delayColor: latencyColor(appSession.delayValue(group: group.name, node: node)),
-                    isTesting: false,
+                    isTesting: appSession.isLatencyTesting(group: group, nodeName: node),
                     selected: node == group.now)
                 {
                     dismiss()
                     Task { await appSession.switchProxy(group: group.name, target: node) }
+                } testAction: {
+                    Task {
+                        await appSession.testSingleNodeLatencyWithLoading(
+                            nodeName: node,
+                            groupName: group.name)
+                    }
                 }
             }
         }
@@ -420,7 +440,8 @@ extension MenuBarRootView {
     func popoverHeader(
         name: String,
         count: Int,
-        @ViewBuilder leading: () -> some View = { EmptyView() }) -> some View
+        @ViewBuilder leading: () -> some View = { EmptyView() },
+        @ViewBuilder trailing: () -> some View = { EmptyView() }) -> some View
     {
         VStack(spacing: 0) {
             HStack(spacing: T.space1) {
@@ -439,6 +460,8 @@ extension MenuBarRootView {
                     .padding(.horizontal, T.space4)
                     .padding(.vertical, T.space1)
                     .background(nativeBadgeCapsule())
+
+                trailing()
             }
             .padding(.horizontal, T.space4)
             .padding(.bottom, T.space2)
@@ -480,6 +503,7 @@ private struct ProxyGroupPopoverNodeItem: View {
     let isTesting: Bool
     let selected: Bool
     let action: () -> Void
+    var testAction: (() -> Void)? = nil
 
     @State private var isHovered = false
 
@@ -517,6 +541,14 @@ private struct ProxyGroupPopoverNodeItem: View {
                 Group {
                     if self.isTesting {
                         LatencyLoadingIndicator()
+                    } else if self.isHovered, let testAction = self.testAction {
+                        Button(action: testAction) {
+                            Image(systemName: "bolt.horizontal")
+                                .font(.app(size: T.FontSize.caption, weight: .semibold))
+                                .foregroundStyle(Color(nsColor: .systemTeal).opacity(T.Opacity.solid))
+                        }
+                        .buttonStyle(.plain)
+                        .frame(height: 14)
                     } else {
                         self.delayMetricView
                     }

@@ -52,9 +52,17 @@ final class AppSession: ObservableObject {
 
     @Published var proxyGroups: [ProxyGroup] = []
     @Published var groupLatencyLoading: Set<String> = []
+    @Published var nodeLatencyLoading: Set<String> = []
+    @Published var groupLatencyPendingDelayKeys: [String: Set<String>] = [:]
+    var groupLoadingRefCount = RefCountedPresence<String>()
+    var pendingDelayKeyRefCount = NestedRefCountedPresence<String, String>()
+    var nodeLoadingRefCount = RefCountedPresence<String>()
+    var proxyGroupIndex: [String: ProxyGroup] = [:]
     @Published var groupLatencies: [String: [String: Int]] = [:]
+    @Published var liveProxyLatestDelay: [String: Int] = [:]
     @Published var proxyHistoryLatestDelay: [String: Int] = [:]
     @Published var proxyNodeTypes: [String: String] = [:]
+    @Published var proxyNodeIDs: [String: String] = [:]
 
     @Published var providerProxyCount: Int = 0
     @Published var providerRuleCount: Int = 0
@@ -69,6 +77,7 @@ final class AppSession: ObservableObject {
 
     private(set) var sortedProxyProviderNames: [String] = []
     @Published var providerUpdating: Set<String> = []
+    @Published var isProxyProvidersRefreshing: Bool = false
     @Published var ruleProviders: [String: ProviderDetail] = [:]
     @Published var ruleItems: [RuleItem] = []
     @Published var isRuleProvidersRefreshing: Bool = false
@@ -357,6 +366,7 @@ final class AppSession: ObservableObject {
     // DRY: shared defaults for latency/provider healthcheck endpoints.
     let defaultHealthcheckURL = "https://www.gstatic.com/generate_204"
     let defaultHealthcheckTimeoutMilliseconds = 5000
+    let maxConcurrentLatencyMeasurements = 8
     var mediumFrequencyIntervalNanoseconds: UInt64 = 4_000_000_000
     var lowFrequencyIntervalNanoseconds: UInt64 = 20_000_000_000
     var currentConnectionsStreamIntervalMilliseconds: Int?
