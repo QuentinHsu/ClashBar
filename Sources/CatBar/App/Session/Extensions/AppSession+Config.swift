@@ -4,6 +4,10 @@ import UniformTypeIdentifiers
 
 @MainActor
 extension AppSession {
+    private var remoteConfigMenuStateResolver: RemoteConfigMenuStateResolver {
+        RemoteConfigMenuStateResolver()
+    }
+
     private struct ConfigImportDestination {
         let fileName: String
         let targetURL: URL
@@ -349,7 +353,10 @@ extension AppSession {
 
         for fileName in remoteFileNames {
             let updatedAt = self.remoteConfigUpdatedAt(for: fileName)
-            nextStates[fileName] = self.mergedRemoteConfigMenuState(for: fileName, updatedAt: updatedAt)
+            let current = self.remoteConfigMenuStates[fileName] ?? .idle
+            nextStates[fileName] = self.remoteConfigMenuStateResolver.resolve(
+                current: current,
+                updatedAt: updatedAt)
         }
 
         self.remoteConfigMenuStates = nextStates
@@ -611,20 +618,6 @@ extension AppSession {
             return nil
         }
         return try? configURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-    }
-
-    private func mergedRemoteConfigMenuState(for fileName: String, updatedAt: Date?) -> RemoteConfigMenuState {
-        let current = self.remoteConfigMenuStates[fileName] ?? .idle
-        let phase: RemoteConfigRefreshPhase = switch current.phase {
-        case .refreshing:
-            .refreshing
-        case .failed:
-            current.updatedAt == updatedAt ? .failed : .idle
-        case .idle:
-            .idle
-        }
-
-        return RemoteConfigMenuState(updatedAt: updatedAt, phase: phase)
     }
 
     private func setRemoteConfigMenuState(
