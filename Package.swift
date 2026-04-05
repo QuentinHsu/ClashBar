@@ -33,4 +33,8 @@ let package = Package(
             name: "CatBarProxyHelper",
             dependencies: ["ProxyHelperShared"],
             path: "Sources/ProxyHelper/Daemon"),
+        .testTarget(
+            name: "CatBarTests",
+            dependencies: ["CatBar"],
+            path: "Tests/CatBarTests"),
     ])

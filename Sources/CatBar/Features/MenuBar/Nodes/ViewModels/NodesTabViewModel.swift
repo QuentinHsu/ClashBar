@@ -95,19 +95,29 @@ final class NodesTabViewModel: ObservableObject {
     }
 
     func filteredProviderNodes(_ nodes: [ProviderProxyNode], searchText: String) -> [ProviderProxyNode] {
-        guard !searchText.isEmpty else { return nodes }
-        let lowered = searchText.lowercased()
+        let keyword = self.normalizedSearchKeyword(searchText)
+        guard let keyword else { return nodes }
         return nodes.filter { node in
-            node.name.lowercased().contains(lowered)
-                || (node.type?.lowercased().contains(lowered) ?? false)
+            self.matchesSearchKeyword(keyword, values: [node.name, node.type ?? ""])
         }
     }
 
     func filteredLocalNodes(_ nodes: [LocalNode], searchText: String) -> [LocalNode] {
-        guard !searchText.isEmpty else { return nodes }
-        let lowered = searchText.lowercased()
-        return nodes.filter {
-            $0.name.lowercased().contains(lowered) || $0.type.lowercased().contains(lowered)
+        let keyword = self.normalizedSearchKeyword(searchText)
+        guard let keyword else { return nodes }
+        return nodes.filter { node in
+            self.matchesSearchKeyword(keyword, values: [node.name, node.type])
+        }
+    }
+
+    private func normalizedSearchKeyword(_ searchText: String) -> String? {
+        let keyword = searchText.trimmed.lowercased()
+        return keyword.isEmpty ? nil : keyword
+    }
+
+    private func matchesSearchKeyword(_ keyword: String, values: [String]) -> Bool {
+        values.contains { value in
+            value.lowercased().contains(keyword)
         }
     }
 }

@@ -11,17 +11,22 @@ final class MenuBarRootViewModel: ObservableObject {
     }
 
     func updateFilteredProxyGroups(from groups: [ProxyGroup], hideHiddenGroups: Bool, mode: CoreMode) {
-        let modeFiltered: [ProxyGroup]
-        switch mode {
-        case .global:
-            modeFiltered = groups.filter { $0.name == "GLOBAL" }
-        case .direct:
-            modeFiltered = []
-        case .rule:
-            modeFiltered = groups.filter { $0.name != "GLOBAL" }
+        let nextGroups = groups.filter { group in
+            guard self.isVisible(group, in: mode) else { return false }
+            return !hideHiddenGroups || group.hidden != true
         }
-        let nextGroups = hideHiddenGroups ? modeFiltered.filter { $0.hidden != true } : modeFiltered
         guard nextGroups != self.filteredProxyGroups else { return }
         self.filteredProxyGroups = nextGroups
+    }
+
+    private func isVisible(_ group: ProxyGroup, in mode: CoreMode) -> Bool {
+        switch mode {
+        case .global:
+            return group.name == "GLOBAL"
+        case .direct:
+            return false
+        case .rule:
+            return group.name != "GLOBAL"
+        }
     }
 }
