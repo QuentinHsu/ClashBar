@@ -73,23 +73,13 @@ final class AppSession: ObservableObject {
         self.settingsPresentationState.isCoreSettingSyncing
     }
 
-    var runtimeVisualStatus: RuntimeVisualStatus {
-        let normalized = self.statusText.lowercased()
-        if normalized == "starting" { return .starting }
-        if normalized == "failed" { return .failed }
+    private let menuBarDisplayResolver = MenuBarDisplayResolver()
 
-        let running = self.coreRepository.isRunning || normalized == "running"
-        if running {
-            switch self.apiStatus {
-            case .healthy:
-                return .runningHealthy
-            case .failed:
-                return .failed
-            case .degraded, .unknown:
-                return .runningDegraded
-            }
-        }
-        return .stopped
+    var runtimeVisualStatus: RuntimeVisualStatus {
+        self.menuBarDisplayResolver.resolveRuntimeVisualStatus(
+            statusText: self.statusText,
+            apiStatus: self.apiStatus,
+            coreIsRunning: self.coreRepository.isRunning)
     }
 
     var runtimeStatusText: String {
@@ -110,22 +100,13 @@ final class AppSession: ObservableObject {
 
     // DRY: unify "running" checks across AppSession and extensions.
     var isRuntimeRunning: Bool {
-        self.coreRepository.isRunning || self.statusText.caseInsensitiveCompare("running") == .orderedSame
+        self.menuBarDisplayResolver.resolveIsRuntimeRunning(
+            statusText: self.statusText,
+            coreIsRunning: self.coreRepository.isRunning)
     }
 
     var menuBarSymbolName: String {
-        switch self.runtimeVisualStatus {
-        case .runningHealthy:
-            "bolt.horizontal.circle.fill"
-        case .runningDegraded:
-            "bolt.horizontal.circle"
-        case .starting:
-            "clock.arrow.circlepath"
-        case .failed:
-            "exclamationmark.triangle.fill"
-        case .stopped:
-            "bolt.slash.circle"
-        }
+        self.menuBarDisplayResolver.resolveSymbolName(for: self.runtimeVisualStatus)
     }
 
     var statusBarDisplayMode: StatusBarDisplayMode {
@@ -142,35 +123,15 @@ final class AppSession: ObservableObject {
     }
 
     var menuBarSpeedLines: MenuBarSpeedLines {
-        guard self.isRuntimeRunning else { return .zero }
-
-        let up = ValueFormatter.speed(max(0, self.traffic.up)).replacingOccurrences(of: " ", with: "")
-        let down = ValueFormatter.speed(max(0, self.traffic.down)).replacingOccurrences(of: " ", with: "")
-        return MenuBarSpeedLines(up: "\(up)↑", down: "\(down)↓")
+        self.menuBarDisplayResolver.resolveSpeedLines(traffic: self.traffic, isRuntimeRunning: self.isRuntimeRunning)
     }
 
     private var computedMenuBarDisplay: MenuBarDisplay {
-        let running = self.isRuntimeRunning
-        switch self.statusBarDisplayMode {
-        case .iconOnly:
-            return MenuBarDisplay(
-                mode: .iconOnly,
-                symbolName: self.menuBarSymbolName,
-                speedLines: nil,
-                isRunning: running)
-        case .iconAndSpeed:
-            return MenuBarDisplay(
-                mode: .iconAndSpeed,
-                symbolName: self.menuBarSymbolName,
-                speedLines: self.menuBarSpeedLines,
-                isRunning: running)
-        case .speedOnly:
-            return MenuBarDisplay(
-                mode: .speedOnly,
-                symbolName: nil,
-                speedLines: self.menuBarSpeedLines,
-                isRunning: running)
-        }
+        self.menuBarDisplayResolver.resolveDisplay(
+            mode: self.statusBarDisplayMode,
+            runtimeVisualStatus: self.runtimeVisualStatus,
+            isRuntimeRunning: self.isRuntimeRunning,
+            traffic: self.traffic)
     }
 
 
