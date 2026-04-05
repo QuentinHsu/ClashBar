@@ -36,6 +36,11 @@ extension AppSession {
         let autoTestGroupLatencies: Bool
     }
 
+    private struct CoreLaunchContext {
+        let configPath: String
+        let launchController: String
+    }
+
     private func performExclusiveCoreAction(_ action: CoreActionState, operation: () async -> Void) async {
         guard self.beginPresentedCoreAction(action) else { return }
         defer { self.endPresentedCoreAction() }
@@ -89,6 +94,45 @@ extension AppSession {
                 kind: .executionFailed(message: message)))
     }
 
+    private func handleMissingRestartCoreConfig() {
+        let message = tr("log.start.no_config")
+        appendLog(level: "error", message: message)
+        self.presentCoreFailureAlert(
+            title: self.tr("app.core.alert.restart_failed.title"),
+            message: message,
+            dedupeKey: "core-restart-failed")
+    }
+
+    private func handleRestartCoreExecutionFailure(_ error: Error) {
+        let errorMessage = self.coreErrorMessage(error)
+        preserveLocalSettingsOnNextSync = false
+        let message = tr("log.restart.failed", errorMessage)
+        appendLog(level: "error", message: message)
+        self.presentCoreFailureAlert(
+            title: self.tr("app.core.alert.restart_failed.title"),
+            message: message,
+            dedupeKey: "core-restart-failed")
+    }
+
+    private func prepareCoreLaunchContext(
+        onMissingConfig: () -> Void,
+        onValidationFailure: (String) -> Void) async -> CoreLaunchContext?
+    {
+        guard let configPath = await resolveSelectedConfigPath() else {
+            onMissingConfig()
+            return nil
+        }
+
+        guard await self.validateConfigBeforeCoreLaunch(configPath: configPath) else {
+            onValidationFailure(configPath)
+            return nil
+        }
+
+        return CoreLaunchContext(
+            configPath: configPath,
+            launchController: applyExternalControllerFromSelectedConfigFile(configPath: configPath))
+    }
+
     func startCore(trigger: StartTrigger = .manual) async {
         guard !self.isRemoteTarget else { return }
         await self.performExclusiveCoreAction(.starting) {
@@ -99,24 +143,24 @@ extension AppSession {
             settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(settingsOverlay)
             preserveLocalSettingsOnNextSync = true
             do {
-                guard let configPath = await resolveSelectedConfigPath() else {
-                    self.handleMissingStartCoreConfig(trigger: trigger)
-                    return
-                }
-
                 settingsOverlay = try await prepareTunOverlayForCoreStartup(settingsOverlay)
 
-                guard await self.validateConfigBeforeCoreLaunch(configPath: configPath) else {
-                    self.handleStartCoreValidationFailure(configPath: configPath, trigger: trigger)
+                guard let launchContext = await self.prepareCoreLaunchContext(
+                    onMissingConfig: { self.handleMissingStartCoreConfig(trigger: trigger) },
+                    onValidationFailure: { configPath in
+                        self.handleStartCoreValidationFailure(configPath: configPath, trigger: trigger)
+                    })
+                else {
                     return
                 }
 
-                let launchController = applyExternalControllerFromSelectedConfigFile(configPath: configPath)
                 statusText = "Starting"
-                _ = try await self.startCoreUseCase.execute(configPath: configPath, controller: launchController)
+                _ = try await self.startCoreUseCase.execute(
+                    configPath: launchContext.configPath,
+                    controller: launchContext.launchController)
 
                 await self.completeCoreBootstrap(
-                    configPath: configPath,
+                    configPath: launchContext.configPath,
                     settingsOverlay: settingsOverlay,
                     options: CoreBootstrapOptions(
                         overlaySyncingKey: "start-overlay",
@@ -156,29 +200,22 @@ extension AppSession {
             preserveLocalSettingsOnNextSync = true
             cancelProviderRefresh(reason: "restart requested")
             do {
-                guard let configPath = await resolveSelectedConfigPath() else {
-                    let message = tr("log.start.no_config")
-                    appendLog(level: "error", message: message)
-                    self.presentCoreFailureAlert(
-                        title: self.tr("app.core.alert.restart_failed.title"),
-                        message: message,
-                        dedupeKey: "core-restart-failed")
+                guard let launchContext = await self.prepareCoreLaunchContext(
+                    onMissingConfig: { self.handleMissingRestartCoreConfig() },
+                    onValidationFailure: { _ in preserveLocalSettingsOnNextSync = false })
+                else {
                     return
                 }
 
-                guard await self.validateConfigBeforeCoreLaunch(configPath: configPath) else {
-                    preserveLocalSettingsOnNextSync = false
-                    return
-                }
-
-                let launchController = applyExternalControllerFromSelectedConfigFile(configPath: configPath)
                 let recoverySnapshotBeforeRestart = self.currentCoreFeatureRecoverySnapshot()
                 await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
                     fallbackRecovery: recoverySnapshotBeforeRestart)
                 let settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(currentEditableSettingsSnapshot())
-                _ = try await self.restartCoreUseCase.execute(configPath: configPath, controller: launchController)
+                _ = try await self.restartCoreUseCase.execute(
+                    configPath: launchContext.configPath,
+                    controller: launchContext.launchController)
                 await self.completeCoreBootstrap(
-                    configPath: configPath,
+                    configPath: launchContext.configPath,
                     settingsOverlay: settingsOverlay,
                     options: CoreBootstrapOptions(
                         overlaySyncingKey: "restart-overlay",
@@ -188,14 +225,7 @@ extension AppSession {
                         refreshSystemProxyAfterBootstrap: true,
                         autoTestGroupLatencies: false))
             } catch {
-                let errorMessage = self.coreErrorMessage(error)
-                preserveLocalSettingsOnNextSync = false
-                let message = tr("log.restart.failed", errorMessage)
-                appendLog(level: "error", message: message)
-                self.presentCoreFailureAlert(
-                    title: self.tr("app.core.alert.restart_failed.title"),
-                    message: message,
-                    dedupeKey: "core-restart-failed")
+                self.handleRestartCoreExecutionFailure(error)
             }
         }
     }

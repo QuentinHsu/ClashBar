@@ -8,6 +8,29 @@ extension AppSession {
         try ReloadRuntimeConfigUseCase(repository: DefaultRuntimeConfigRepository(transport: self.clientOrThrow()))
     }
 
+    private func canonicalConfigPath(_ url: URL?) -> String? {
+        url?.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    private func validateConfigSelectionIfNeeded(
+        previousSelectedURL: URL?,
+        targetSelectedURL: URL,
+        staleSelectionCanonicalPath: String?) async -> Bool
+    {
+        let validationFailure = await self.configValidationFailureDetails(configPath: targetSelectedURL.path)
+        let currentCanonicalPath = self.canonicalConfigPath(self.configRepository.selectedConfig)
+        guard currentCanonicalPath == staleSelectionCanonicalPath else { return false }
+
+        guard let validationFailure else { return true }
+        self.handleConfigValidationFailure(configPath: targetSelectedURL.path, details: validationFailure)
+        if let previousSelectedURL {
+            configRepository.selectConfig(previousSelectedURL)
+        }
+        _ = self.syncSelectedConfigSelection(configRepository.selectedConfig)
+        syncConfigDisplayState()
+        return false
+    }
+
     func seedBundledConfigIfNeeded() {
         let fileManager = FileManager.default
         let targetURL = workingDirectoryManager.configDirectoryURL
@@ -43,24 +66,18 @@ extension AppSession {
         guard configRepository.chooseConfigDirectory() != nil else { return }
 
         let nextSelectedURL = configRepository.selectedConfig
-        let previousCanonicalPath = previousSelectedURL?.standardizedFileURL.resolvingSymlinksInPath().path
-        let nextCanonicalPath = nextSelectedURL?.standardizedFileURL.resolvingSymlinksInPath().path
+        let previousCanonicalPath = self.canonicalConfigPath(previousSelectedURL)
+        let nextCanonicalPath = self.canonicalConfigPath(nextSelectedURL)
 
         if coreRepository.isRunning,
            let nextSelectedURL,
            previousCanonicalPath != nextCanonicalPath
         {
-            let validationFailure = await self.configValidationFailureDetails(configPath: nextSelectedURL.path)
-            let currentCanonicalPath = self.configRepository.selectedConfig?.standardizedFileURL
-                .resolvingSymlinksInPath().path
-            guard currentCanonicalPath == nextCanonicalPath else { return }
-            if let validationFailure {
-                self.handleConfigValidationFailure(configPath: nextSelectedURL.path, details: validationFailure)
-                if let previousSelectedURL {
-                    configRepository.selectConfig(previousSelectedURL)
-                }
-                _ = self.syncSelectedConfigSelection(configRepository.selectedConfig)
-                syncConfigDisplayState()
+            guard await self.validateConfigSelectionIfNeeded(
+                previousSelectedURL: previousSelectedURL,
+                targetSelectedURL: nextSelectedURL,
+                staleSelectionCanonicalPath: nextCanonicalPath)
+            else {
                 return
             }
         }
@@ -80,24 +97,18 @@ extension AppSession {
             return
         }
 
-        let previousCanonicalPath = previousSelectedURL?.standardizedFileURL.resolvingSymlinksInPath().path
-        let targetCanonicalPath = matched.standardizedFileURL.resolvingSymlinksInPath().path
+        let previousCanonicalPath = self.canonicalConfigPath(previousSelectedURL)
+        let targetCanonicalPath = self.canonicalConfigPath(matched)
 
         if coreRepository.isRunning,
            previousCanonicalPath != targetCanonicalPath
         {
-            let validationFailure = await self.configValidationFailureDetails(configPath: matched.path)
-            let currentCanonicalPath = self.configRepository.selectedConfig?.standardizedFileURL
-                .resolvingSymlinksInPath().path
             // Validation runs before selecting `matched`, so stale-check against the original selection.
-            guard currentCanonicalPath == previousCanonicalPath else { return }
-            if let validationFailure {
-                self.handleConfigValidationFailure(configPath: matched.path, details: validationFailure)
-                if let previousSelectedURL {
-                    configRepository.selectConfig(previousSelectedURL)
-                }
-                _ = self.syncSelectedConfigSelection(configRepository.selectedConfig)
-                syncConfigDisplayState()
+            guard await self.validateConfigSelectionIfNeeded(
+                previousSelectedURL: previousSelectedURL,
+                targetSelectedURL: matched,
+                staleSelectionCanonicalPath: previousCanonicalPath)
+            else {
                 return
             }
         }
