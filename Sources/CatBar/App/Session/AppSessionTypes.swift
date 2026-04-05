@@ -171,6 +171,25 @@ struct ConfigPresentationState {
     }
 }
 
+struct LogPresentationState {
+    var errorLogs: [AppErrorLogEntry] = []
+
+    mutating func clear(keepingCapacity: Bool) {
+        self.errorLogs.removeAll(keepingCapacity: keepingCapacity)
+    }
+
+    mutating func trim(to maxEntries: Int) {
+        guard self.errorLogs.count > maxEntries else { return }
+        self.errorLogs.removeLast(self.errorLogs.count - maxEntries)
+    }
+
+    mutating func prepend(_ entries: [AppErrorLogEntry], limit: Int) {
+        guard !entries.isEmpty else { return }
+        let combined = entries.reversed() + self.errorLogs
+        self.errorLogs = Array(combined.prefix(limit))
+    }
+}
+
 struct MenuBarSpeedLines: Equatable {
     let up: String
     let down: String

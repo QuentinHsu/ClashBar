@@ -12,7 +12,7 @@ extension AppSession {
         mihomoLogFlushTask?.cancel()
         mihomoLogFlushTask = nil
         pendingMihomoLogs.removeAll(keepingCapacity: true)
-        errorLogs.removeAll(keepingCapacity: false)
+        self.clearPresentedLogs(keepingCapacity: false)
         catbarLogStore?.clear()
         mihomoLogStore?.clear()
     }
@@ -54,8 +54,7 @@ extension AppSession {
     func trimInMemoryLogsForCurrentVisibility() {
         self.flushPendingMihomoLogsIfNeeded()
         let maxEntries = isPanelPresented ? maxLogEntries : hiddenPanelMaxInMemoryLogEntries
-        guard errorLogs.count > maxEntries else { return }
-        errorLogs.removeLast(errorLogs.count - maxEntries)
+        self.trimPresentedLogs(to: maxEntries)
     }
 
     func tr(_ key: String) -> String {
@@ -87,12 +86,8 @@ extension AppSession {
     }
 
     private func appendLogEntries(_ entries: [AppErrorLogEntry]) {
-        guard !entries.isEmpty else { return }
-
-        // Single-allocation prepend: avoids O(n) in-place shift + separate removeLast
         let maxEntries = isPanelPresented ? maxLogEntries : hiddenPanelMaxInMemoryLogEntries
-        let combined = entries.reversed() + errorLogs
-        errorLogs = Array(combined.prefix(maxEntries))
+        self.prependPresentedLogs(entries, limit: maxEntries)
     }
 
     private func persistLogEntriesToFile(_ entries: [AppErrorLogEntry]) {

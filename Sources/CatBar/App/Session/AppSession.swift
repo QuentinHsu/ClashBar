@@ -78,7 +78,7 @@ final class AppSession: ObservableObject {
         didSet { self.refreshMenuBarDisplaySnapshotIfNeeded() }
     }
 
-    @Published var errorLogs: [AppErrorLogEntry] = []
+    @Published private var logPresentationState = LogPresentationState()
     @Published var startupErrorMessage: String?
     @Published var coreActionState: CoreActionState = .idle
     @Published var coreUpgradeState: CoreUpgradeState = .idle
@@ -234,6 +234,18 @@ final class AppSession: ObservableObject {
             availableFileNames: availableFileNames)
     }
 
+    func clearPresentedLogs(keepingCapacity: Bool) {
+        self.logPresentationState.clear(keepingCapacity: keepingCapacity)
+    }
+
+    func trimPresentedLogs(to maxEntries: Int) {
+        self.logPresentationState.trim(to: maxEntries)
+    }
+
+    func prependPresentedLogs(_ entries: [AppErrorLogEntry], limit: Int) {
+        self.logPresentationState.prepend(entries, limit: limit)
+    }
+
     var isRemoteTarget: Bool {
         !self.remoteMachineStore.activeTarget.isLocal
     }
@@ -265,6 +277,11 @@ final class AppSession: ObservableObject {
     var remoteConfigMenuStates: [String: RemoteConfigMenuState] {
         get { self.configPresentationState.remoteConfigMenuStates }
         set { self.configPresentationState.remoteConfigMenuStates = newValue }
+    }
+
+    var errorLogs: [AppErrorLogEntry] {
+        get { self.logPresentationState.errorLogs }
+        set { self.logPresentationState.errorLogs = newValue }
     }
 
     var providerProxyCount: Int {
