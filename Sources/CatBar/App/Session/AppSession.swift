@@ -4,16 +4,8 @@ import SwiftUI
 
 @MainActor
 final class AppSession: ObservableObject {
-    @Published var statusText: String = "Stopped" {
-        didSet { self.refreshMenuBarDisplaySnapshotIfNeeded() }
-    }
-
-    @Published var version: String = "-"
-    @Published var controller: String = "127.0.0.1:9090"
-    @Published var externalControllerDisplay: String = "127.0.0.1:9090"
+    @Published private var coreRuntimePresentationState = CoreRuntimePresentationState()
     var localExternalControllerDisplay: String = "127.0.0.1:9090"
-    @Published var controllerUIURL: String = "http://127.0.0.1:9090/ui"
-    @Published var controllerSecret: String?
 
     @Published private var runtimeMetricsPresentationState = RuntimeMetricsPresentationState()
 
@@ -28,26 +20,11 @@ final class AppSession: ObservableObject {
     let connectionsStore = ConnectionsStore()
     var appUpdater: (any AppUpdating)?
 
-    @Published var currentMode: CoreMode = .rule
-    @Published var logLevel: String = "info"
-    @Published var port: Int?
-    @Published var socksPort: Int?
-    @Published var redirPort: Int?
-    @Published var tproxyPort: Int?
-    @Published var mixedPort: Int = 7890
-
     @Published private var configPresentationState = ConfigPresentationState()
     @Published private var proxyGroupPresentationState = ProxyGroupPresentationState()
     @Published private var proxyLatencyPresentationState = ProxyLatencyPresentationState()
     @Published private var providerPresentationState = ProviderPresentationState()
     @Published private var systemProxyPresentationState = SystemProxyPresentationState()
-
-    @Published var isProxySyncing: Bool = false
-    @Published var isTunSyncing: Bool = false
-
-    @Published var apiStatus: APIHealth = .unknown {
-        didSet { self.refreshMenuBarDisplaySnapshotIfNeeded() }
-    }
 
     @Published private var logPresentationState = LogPresentationState()
     @Published private var coreControlPresentationState = CoreControlPresentationState()
@@ -157,6 +134,15 @@ final class AppSession: ObservableObject {
 
     func updatePresentedTrafficTotals(from snapshot: TrafficSnapshot, now: Date) {
         self.runtimeMetricsPresentationState.updateTrafficTotals(from: snapshot, now: now)
+    }
+
+    func applyPresentedRuntimeConfigSnapshot(
+        _ config: ConfigSnapshot,
+        normalizeMode: (String?) -> CoreMode?)
+    {
+        self.coreRuntimePresentationState.applyRuntimeConfigSnapshot(
+            config,
+            normalizeMode: normalizeMode)
     }
 
     func trimPresentedLogs(to maxEntries: Int) {
@@ -357,6 +343,92 @@ final class AppSession: ObservableObject {
 
     var isRemoteTarget: Bool {
         !self.remoteMachineStore.activeTarget.isLocal
+    }
+
+    var statusText: String {
+        get { self.coreRuntimePresentationState.statusText }
+        set {
+            self.coreRuntimePresentationState.statusText = newValue
+            self.refreshMenuBarDisplaySnapshotIfNeeded()
+        }
+    }
+
+    var version: String {
+        get { self.coreRuntimePresentationState.version }
+        set { self.coreRuntimePresentationState.version = newValue }
+    }
+
+    var controller: String {
+        get { self.coreRuntimePresentationState.controller }
+        set { self.coreRuntimePresentationState.controller = newValue }
+    }
+
+    var externalControllerDisplay: String {
+        get { self.coreRuntimePresentationState.externalControllerDisplay }
+        set { self.coreRuntimePresentationState.externalControllerDisplay = newValue }
+    }
+
+    var controllerUIURL: String {
+        get { self.coreRuntimePresentationState.controllerUIURL }
+        set { self.coreRuntimePresentationState.controllerUIURL = newValue }
+    }
+
+    var controllerSecret: String? {
+        get { self.coreRuntimePresentationState.controllerSecret }
+        set { self.coreRuntimePresentationState.controllerSecret = newValue }
+    }
+
+    var currentMode: CoreMode {
+        get { self.coreRuntimePresentationState.currentMode }
+        set { self.coreRuntimePresentationState.currentMode = newValue }
+    }
+
+    var logLevel: String {
+        get { self.coreRuntimePresentationState.logLevel }
+        set { self.coreRuntimePresentationState.logLevel = newValue }
+    }
+
+    var port: Int? {
+        get { self.coreRuntimePresentationState.port }
+        set { self.coreRuntimePresentationState.port = newValue }
+    }
+
+    var socksPort: Int? {
+        get { self.coreRuntimePresentationState.socksPort }
+        set { self.coreRuntimePresentationState.socksPort = newValue }
+    }
+
+    var redirPort: Int? {
+        get { self.coreRuntimePresentationState.redirPort }
+        set { self.coreRuntimePresentationState.redirPort = newValue }
+    }
+
+    var tproxyPort: Int? {
+        get { self.coreRuntimePresentationState.tproxyPort }
+        set { self.coreRuntimePresentationState.tproxyPort = newValue }
+    }
+
+    var mixedPort: Int {
+        get { self.coreRuntimePresentationState.mixedPort }
+        set { self.coreRuntimePresentationState.mixedPort = newValue }
+    }
+
+    var isProxySyncing: Bool {
+        get { self.coreRuntimePresentationState.isProxySyncing }
+        set { self.coreRuntimePresentationState.isProxySyncing = newValue }
+    }
+
+    var isTunSyncing: Bool {
+        get { self.coreRuntimePresentationState.isTunSyncing }
+        set { self.coreRuntimePresentationState.isTunSyncing = newValue }
+    }
+
+    var apiStatus: APIHealth {
+        get { self.coreRuntimePresentationState.apiStatus }
+        set {
+            self.coreRuntimePresentationState.apiStatus = newValue
+            self.refreshMenuBarDisplaySnapshotIfNeeded()
+        }
     }
 
     var traffic: TrafficSnapshot {

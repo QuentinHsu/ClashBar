@@ -418,6 +418,40 @@ struct SettingsPresentationState {
     }
 }
 
+struct CoreRuntimePresentationState {
+    var statusText: String = "Stopped"
+    var version: String = "-"
+    var controller: String = "127.0.0.1:9090"
+    var externalControllerDisplay: String = "127.0.0.1:9090"
+    var controllerUIURL: String = "http://127.0.0.1:9090/ui"
+    var controllerSecret: String?
+    var currentMode: CoreMode = .rule
+    var logLevel: String = ConfigLogLevel.info.rawValue
+    var port: Int?
+    var socksPort: Int?
+    var redirPort: Int?
+    var tproxyPort: Int?
+    var mixedPort: Int = 7890
+    var apiStatus: APIHealth = .unknown
+    var isProxySyncing = false
+    var isTunSyncing = false
+
+    mutating func applyRuntimeConfigSnapshot(
+        _ config: ConfigSnapshot,
+        normalizeMode: (String?) -> CoreMode?)
+    {
+        if let remoteMode = normalizeMode(config.mode) {
+            self.currentMode = remoteMode
+        }
+        self.logLevel = config.logLevel ?? self.logLevel
+        self.port = config.port
+        self.socksPort = config.socksPort
+        self.redirPort = config.redirPort
+        self.tproxyPort = config.tproxyPort
+        self.mixedPort = config.mixedPort ?? 0
+    }
+}
+
 struct RuntimeMetricsPresentationState {
     var traffic = TrafficSnapshot(up: 0, down: 0)
     var memory = MemorySnapshot(inuse: 0)

@@ -211,17 +211,7 @@ extension AppSession {
     }
 
     private func applyRuntimeConfigSnapshot(_ config: ConfigSnapshot) {
-        let remoteMode = normalizeMode(config.mode)
-        if let remoteMode {
-            currentMode = remoteMode
-        }
-        logLevel = config.logLevel ?? logLevel
-
-        port = config.port
-        socksPort = config.socksPort
-        redirPort = config.redirPort
-        tproxyPort = config.tproxyPort
-        mixedPort = config.mixedPort ?? 0
+        self.applyPresentedRuntimeConfigSnapshot(config, normalizeMode: self.normalizeMode)
 
         if !self.isRemoteTarget, let externalController = config.externalController {
             applyExternalControllerFromConfig(externalController)
