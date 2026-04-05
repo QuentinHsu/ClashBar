@@ -2,6 +2,10 @@ import Foundation
 
 @MainActor
 extension AppSession {
+    private var coreUpgradeStateResolver: CoreUpgradeStateResolver {
+        CoreUpgradeStateResolver(unknownMessage: tr("ui.common.unknown"))
+    }
+
     private func maintenanceRepository() throws -> MaintenanceRepository {
         try DefaultMaintenanceRepository(transport: self.clientOrThrow())
     }
@@ -115,69 +119,14 @@ extension AppSession {
     }
 
     private func coreUpgradeState(from response: CoreUpgradeResponse) -> CoreUpgradeState {
-        if let status = response.status?.trimmedNonEmpty,
-           status.caseInsensitiveCompare("ok") == .orderedSame
-        {
-            return .succeeded
-        }
-
-        if let message = response.message?.trimmedNonEmpty {
-            return self.coreUpgradeState(fromMessage: message)
-        }
-
-        return .failed(message: tr("ui.common.unknown"))
+        self.coreUpgradeStateResolver.resolve(response: response)
     }
 
     private func coreUpgradeState(from error: Error) -> CoreUpgradeState {
-        if let apiError = error as? APIError,
-           case let .statusCode(_, responseBody) = apiError
-        {
-            if let data = responseBody.data(using: .utf8),
-               let response = try? JSONDecoder().decode(CoreUpgradeResponse.self, from: data)
-            {
-                let state = self.coreUpgradeState(from: response)
-                if case let .failed(message) = state, message == tr("ui.common.unknown") {
-                    return self.coreUpgradeState(fromMessage: responseBody)
-                }
-                return state
-            }
-
-            return self.coreUpgradeState(fromMessage: responseBody)
-        }
-
-        return self.coreUpgradeState(fromMessage: error.localizedDescription)
+        self.coreUpgradeStateResolver.resolve(error: error)
     }
 
     private func coreUpgradeState(fromMessage message: String) -> CoreUpgradeState {
-        let trimmedMessage = message.trimmed
-        guard !trimmedMessage.isEmpty else {
-            return .failed(message: tr("ui.common.unknown"))
-        }
-
-        if self.isAlreadyLatestCoreUpgradeMessage(trimmedMessage) {
-            return .alreadyLatest(version: self.latestVersion(in: trimmedMessage))
-        }
-
-        return .failed(message: trimmedMessage)
-    }
-
-    private func isAlreadyLatestCoreUpgradeMessage(_ message: String) -> Bool {
-        message.range(
-            of: "already using latest version",
-            options: [.caseInsensitive, .diacriticInsensitive]) != nil
-    }
-
-    private func latestVersion(in message: String) -> String? {
-        let pattern = #"v?\d+(?:\.\d+)+"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let range = NSRange(message.startIndex..<message.endIndex, in: message)
-        guard let match = regex.matches(in: message, range: range).last,
-              let swiftRange = Range(match.range, in: message)
-        else {
-            return nil
-        }
-
-        let raw = String(message[swiftRange])
-        return AppSemanticVersion.normalizedDisplayVersion(from: raw)
+        self.coreUpgradeStateResolver.resolve(message: message)
     }
 }

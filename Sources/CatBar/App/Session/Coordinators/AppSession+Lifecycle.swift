@@ -33,150 +33,156 @@ extension AppSession {
         case restart
     }
 
+    private func performExclusiveCoreAction(_ action: CoreActionState, operation: () async -> Void) async {
+        guard self.beginPresentedCoreAction(action) else { return }
+        defer { self.endPresentedCoreAction() }
+        await operation()
+    }
+
     func startCore(trigger: StartTrigger = .manual) async {
         guard !self.isRemoteTarget else { return }
-        guard self.beginPresentedCoreAction(.starting) else { return }
-        if trigger == .manual {
-            shouldResumeCoreAfterNetworkRecovery = false
-        }
-        defer { self.endPresentedCoreAction() }
-        var settingsOverlay = currentEditableSettingsSnapshot()
-        settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(settingsOverlay)
-        preserveLocalSettingsOnNextSync = true
-        do {
-            guard let configPath = await resolveSelectedConfigPath() else {
-                let message = tr("log.start.no_config")
+        await self.performExclusiveCoreAction(.starting) {
+            if trigger == .manual {
+                shouldResumeCoreAfterNetworkRecovery = false
+            }
+            var settingsOverlay = currentEditableSettingsSnapshot()
+            settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(settingsOverlay)
+            preserveLocalSettingsOnNextSync = true
+            do {
+                guard let configPath = await resolveSelectedConfigPath() else {
+                    let message = tr("log.start.no_config")
+                    appendLog(level: "error", message: message)
+                    self.presentCoreFailureAlert(
+                        title: self.tr("app.core.alert.start_failed.title"),
+                        message: message,
+                        dedupeKey: "core-start-failed")
+                    if trigger == .auto {
+                        self.setPresentedStartupError(message)
+                        statusText = "Stopped"
+                        apiStatus = .unknown
+                    }
+                    return
+                }
+
+                settingsOverlay = try await prepareTunOverlayForCoreStartup(settingsOverlay)
+
+                guard await self.validateConfigBeforeCoreLaunch(configPath: configPath) else {
+                    preserveLocalSettingsOnNextSync = false
+                    if trigger == .auto {
+                        let fileName = URL(fileURLWithPath: configPath).lastPathComponent
+                        self.setPresentedStartupError(tr("app.config.validation_failed.startup", fileName))
+                        statusText = "Stopped"
+                        apiStatus = .unknown
+                    } else {
+                        statusText = "Failed"
+                        apiStatus = .failed
+                    }
+                    return
+                }
+
+                let launchController = applyExternalControllerFromSelectedConfigFile(configPath: configPath)
+                statusText = "Starting"
+                _ = try await self.startCoreUseCase.execute(configPath: configPath, controller: launchController)
+
+                await self.completeCoreBootstrap(
+                    configPath: configPath,
+                    settingsOverlay: settingsOverlay,
+                    options: CoreBootstrapOptions(
+                        overlaySyncingKey: "start-overlay",
+                        providerTrigger: .start,
+                        refreshProxyGroupsAfterBootstrap: false,
+                        refreshSystemProxyBeforeOverlay: true,
+                        refreshSystemProxyAfterBootstrap: false,
+                        autoTestGroupLatencies: true))
+            } catch {
+                let errorMessage = self.coreErrorMessage(error)
+                preserveLocalSettingsOnNextSync = false
+                let message = tr("log.start.failed", errorMessage)
                 appendLog(level: "error", message: message)
                 self.presentCoreFailureAlert(
                     title: self.tr("app.core.alert.start_failed.title"),
                     message: message,
                     dedupeKey: "core-start-failed")
                 if trigger == .auto {
+                    statusText = "Stopped"
+                    apiStatus = .unknown
                     self.setPresentedStartupError(message)
-                    statusText = "Stopped"
-                    apiStatus = .unknown
-                }
-                return
-            }
-
-            settingsOverlay = try await prepareTunOverlayForCoreStartup(settingsOverlay)
-
-            guard await self.validateConfigBeforeCoreLaunch(configPath: configPath) else {
-                preserveLocalSettingsOnNextSync = false
-                if trigger == .auto {
-                    let fileName = URL(fileURLWithPath: configPath).lastPathComponent
-                    self.setPresentedStartupError(tr("app.config.validation_failed.startup", fileName))
-                    statusText = "Stopped"
-                    apiStatus = .unknown
                 } else {
                     statusText = "Failed"
                     apiStatus = .failed
                 }
-                return
-            }
-
-            let launchController = applyExternalControllerFromSelectedConfigFile(configPath: configPath)
-            statusText = "Starting"
-            _ = try await self.startCoreUseCase.execute(configPath: configPath, controller: launchController)
-
-            await self.completeCoreBootstrap(
-                configPath: configPath,
-                settingsOverlay: settingsOverlay,
-                options: CoreBootstrapOptions(
-                    overlaySyncingKey: "start-overlay",
-                    providerTrigger: .start,
-                    refreshProxyGroupsAfterBootstrap: false,
-                    refreshSystemProxyBeforeOverlay: true,
-                    refreshSystemProxyAfterBootstrap: false,
-                    autoTestGroupLatencies: true))
-        } catch {
-            let errorMessage = self.coreErrorMessage(error)
-            preserveLocalSettingsOnNextSync = false
-            let message = tr("log.start.failed", errorMessage)
-            appendLog(level: "error", message: message)
-            self.presentCoreFailureAlert(
-                title: self.tr("app.core.alert.start_failed.title"),
-                message: message,
-                dedupeKey: "core-start-failed")
-            if trigger == .auto {
-                statusText = "Stopped"
-                apiStatus = .unknown
-                self.setPresentedStartupError(message)
-            } else {
-                statusText = "Failed"
-                apiStatus = .failed
             }
         }
     }
 
     func stopCore(trigger: StopTrigger = .manual) async {
         guard !self.isRemoteTarget else { return }
-        guard self.beginPresentedCoreAction(.stopping) else { return }
-        if trigger == .manual {
-            shouldResumeCoreAfterNetworkRecovery = false
+        await self.performExclusiveCoreAction(.stopping) {
+            if trigger == .manual {
+                shouldResumeCoreAfterNetworkRecovery = false
+            }
+            let recoverySnapshotBeforeStop = self.currentCoreFeatureRecoverySnapshot()
+            await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
+                fallbackRecovery: recoverySnapshotBeforeStop,
+                transitionKind: .stop)
+            self.cancelDeferredEditableSettingsOverlaySync()
+            cancelProviderRefresh(reason: "stop requested")
+            await self.stopCoreUseCase.execute()
+            cancelPolling()
+            statusText = "Stopped"
+            apiStatus = .unknown
+            resetTrafficPresentation()
         }
-        let recoverySnapshotBeforeStop = self.currentCoreFeatureRecoverySnapshot()
-        defer { self.endPresentedCoreAction() }
-        await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
-            fallbackRecovery: recoverySnapshotBeforeStop,
-            transitionKind: .stop)
-        self.cancelDeferredEditableSettingsOverlaySync()
-        cancelProviderRefresh(reason: "stop requested")
-        await self.stopCoreUseCase.execute()
-        cancelPolling()
-        statusText = "Stopped"
-        apiStatus = .unknown
-        resetTrafficPresentation()
     }
 
     func restartCore(trigger: ProviderRefreshTrigger = .restart) async {
         guard !self.isRemoteTarget else { return }
-        guard self.beginPresentedCoreAction(.restarting) else { return }
-        defer { self.endPresentedCoreAction() }
-        preserveLocalSettingsOnNextSync = true
-        cancelProviderRefresh(reason: "restart requested")
-        do {
-            guard let configPath = await resolveSelectedConfigPath() else {
-                let message = tr("log.start.no_config")
+        await self.performExclusiveCoreAction(.restarting) {
+            preserveLocalSettingsOnNextSync = true
+            cancelProviderRefresh(reason: "restart requested")
+            do {
+                guard let configPath = await resolveSelectedConfigPath() else {
+                    let message = tr("log.start.no_config")
+                    appendLog(level: "error", message: message)
+                    self.presentCoreFailureAlert(
+                        title: self.tr("app.core.alert.restart_failed.title"),
+                        message: message,
+                        dedupeKey: "core-restart-failed")
+                    return
+                }
+
+                guard await self.validateConfigBeforeCoreLaunch(configPath: configPath) else {
+                    preserveLocalSettingsOnNextSync = false
+                    return
+                }
+
+                let launchController = applyExternalControllerFromSelectedConfigFile(configPath: configPath)
+                let recoverySnapshotBeforeRestart = self.currentCoreFeatureRecoverySnapshot()
+                await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
+                    fallbackRecovery: recoverySnapshotBeforeRestart,
+                    transitionKind: .restart)
+                let settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(currentEditableSettingsSnapshot())
+                _ = try await self.restartCoreUseCase.execute(configPath: configPath, controller: launchController)
+                await self.completeCoreBootstrap(
+                    configPath: configPath,
+                    settingsOverlay: settingsOverlay,
+                    options: CoreBootstrapOptions(
+                        overlaySyncingKey: "restart-overlay",
+                        providerTrigger: trigger,
+                        refreshProxyGroupsAfterBootstrap: true,
+                        refreshSystemProxyBeforeOverlay: false,
+                        refreshSystemProxyAfterBootstrap: true,
+                        autoTestGroupLatencies: false))
+            } catch {
+                let errorMessage = self.coreErrorMessage(error)
+                preserveLocalSettingsOnNextSync = false
+                let message = tr("log.restart.failed", errorMessage)
                 appendLog(level: "error", message: message)
                 self.presentCoreFailureAlert(
                     title: self.tr("app.core.alert.restart_failed.title"),
                     message: message,
                     dedupeKey: "core-restart-failed")
-                return
             }
-
-            guard await self.validateConfigBeforeCoreLaunch(configPath: configPath) else {
-                preserveLocalSettingsOnNextSync = false
-                return
-            }
-
-            let launchController = applyExternalControllerFromSelectedConfigFile(configPath: configPath)
-            let recoverySnapshotBeforeRestart = self.currentCoreFeatureRecoverySnapshot()
-            await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
-                fallbackRecovery: recoverySnapshotBeforeRestart,
-                transitionKind: .restart)
-            let settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(currentEditableSettingsSnapshot())
-            _ = try await self.restartCoreUseCase.execute(configPath: configPath, controller: launchController)
-            await self.completeCoreBootstrap(
-                configPath: configPath,
-                settingsOverlay: settingsOverlay,
-                options: CoreBootstrapOptions(
-                    overlaySyncingKey: "restart-overlay",
-                    providerTrigger: trigger,
-                    refreshProxyGroupsAfterBootstrap: true,
-                    refreshSystemProxyBeforeOverlay: false,
-                    refreshSystemProxyAfterBootstrap: true,
-                    autoTestGroupLatencies: false))
-        } catch {
-            let errorMessage = self.coreErrorMessage(error)
-            preserveLocalSettingsOnNextSync = false
-            let message = tr("log.restart.failed", errorMessage)
-            appendLog(level: "error", message: message)
-            self.presentCoreFailureAlert(
-                title: self.tr("app.core.alert.restart_failed.title"),
-                message: message,
-                dedupeKey: "core-restart-failed")
         }
     }
 
