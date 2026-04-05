@@ -588,7 +588,7 @@ struct MenuBarDisplay: Equatable {
     let isRunning: Bool
 }
 
-struct CoreFeatureRecoveryState {
+struct CoreFeatureRecoveryState: Equatable {
     let systemProxyEnabled: Bool
     let tunEnabled: Bool
 

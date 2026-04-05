@@ -23,6 +23,10 @@ extension AppSession {
         RestartCoreUseCase(coreRepository: self.coreRepository)
     }
 
+    private var coreFeatureRecoveryTransitionResolver: CoreFeatureRecoveryTransitionResolver {
+        CoreFeatureRecoveryTransitionResolver()
+    }
+
     private struct CoreBootstrapOptions {
         let overlaySyncingKey: String
         let providerTrigger: ProviderRefreshTrigger
@@ -30,11 +34,6 @@ extension AppSession {
         let refreshSystemProxyBeforeOverlay: Bool
         let refreshSystemProxyAfterBootstrap: Bool
         let autoTestGroupLatencies: Bool
-    }
-
-    private enum CoreTransitionKind {
-        case stop
-        case restart
     }
 
     private func performExclusiveCoreAction(_ action: CoreActionState, operation: () async -> Void) async {
@@ -140,8 +139,7 @@ extension AppSession {
             }
             let recoverySnapshotBeforeStop = self.currentCoreFeatureRecoverySnapshot()
             await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
-                fallbackRecovery: recoverySnapshotBeforeStop,
-                transitionKind: .stop)
+                fallbackRecovery: recoverySnapshotBeforeStop)
             self.cancelDeferredEditableSettingsOverlaySync()
             cancelProviderRefresh(reason: "stop requested")
             await self.stopCoreUseCase.execute()
@@ -176,8 +174,7 @@ extension AppSession {
                 let launchController = applyExternalControllerFromSelectedConfigFile(configPath: configPath)
                 let recoverySnapshotBeforeRestart = self.currentCoreFeatureRecoverySnapshot()
                 await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
-                    fallbackRecovery: recoverySnapshotBeforeRestart,
-                    transitionKind: .restart)
+                    fallbackRecovery: recoverySnapshotBeforeRestart)
                 let settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(currentEditableSettingsSnapshot())
                 _ = try await self.restartCoreUseCase.execute(configPath: configPath, controller: launchController)
                 await self.completeCoreBootstrap(
@@ -440,30 +437,22 @@ extension AppSession {
     }
 
     private func prepareCoreFeatureRecoveryBeforeCoreTransition(
-        fallbackRecovery: CoreFeatureRecoveryState,
-        transitionKind: CoreTransitionKind) async
+        fallbackRecovery: CoreFeatureRecoveryState) async
     {
-        let runtimeRunningBeforeTransition = self.isRuntimeRunning
-        let capturedRecovery = CoreFeatureRecoveryState(
-            systemProxyEnabled: runtimeRunningBeforeTransition && self.isSystemProxyEnabled,
-            tunEnabled: runtimeRunningBeforeTransition && self.isTunEnabled)
+        let transitionPlan = self.coreFeatureRecoveryTransitionResolver.resolve(
+            runtimeRunningBeforeTransition: self.isRuntimeRunning,
+            systemProxyEnabled: self.isSystemProxyEnabled,
+            tunEnabled: self.isTunEnabled,
+            fallbackRecovery: fallbackRecovery,
+            pendingRecovery: self.pendingCoreFeatureRecoveryState)
+        self.pendingCoreFeatureRecoveryState = transitionPlan.pendingRecovery
 
-        let baseRecovery: CoreFeatureRecoveryState = if capturedRecovery.shouldRecoverAnyFeature {
-            capturedRecovery
-        } else {
-            // Keep the pre-transition snapshot when runtime state changes race with stop/restart actions.
-            fallbackRecovery
-        }
-
-        let recovery = baseRecovery.merged(with: self.pendingCoreFeatureRecoveryState)
-        self.pendingCoreFeatureRecoveryState = recovery.pendingState
-
-        if runtimeRunningBeforeTransition, recovery.tunEnabled {
+        if transitionPlan.shouldDisableTunBeforeTransition {
             self.isTunEnabled = false
             self.appendLog(level: "info", message: self.tr("log.tun.toggled", self.tr("log.tun.disabled")))
         }
 
-        guard self.isSystemProxyEnabled else { return }
+        guard transitionPlan.shouldDisableSystemProxyBeforeTransition else { return }
         self.isProxySyncing = true
         defer { self.isProxySyncing = false }
 
