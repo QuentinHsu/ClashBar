@@ -237,7 +237,11 @@ struct LogPresentationState {
 }
 
 struct ProxyGroupPresentationState {
-    var proxyGroups: [ProxyGroup] = []
+    var proxyGroups: [ProxyGroup] = [] {
+        didSet {
+            self.rebuildGroupIndex()
+        }
+    }
     var proxyGroupIndex: [String: ProxyGroup] = [:]
     var proxyHistoryLatestDelay: [String: Int] = [:]
     var proxyNodeTypes: [String: String] = [:]

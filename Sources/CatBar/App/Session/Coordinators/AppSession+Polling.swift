@@ -306,7 +306,6 @@ extension AppSession {
             proxyProviders: proxyProviders,
             fallbackProxyProviders: self.proxyProvidersDetail)
         self.proxyGroups = presentation.groups
-        self.clearPresentedProxyGroupIndex()
         self.proxyHistoryLatestDelay = presentation.history
         self.proxyNodeTypes = presentation.nodeTypes
         self.proxyNodeIDs = presentation.nodeIDs

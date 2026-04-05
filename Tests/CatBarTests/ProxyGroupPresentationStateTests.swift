@@ -2,6 +2,18 @@ import XCTest
 @testable import CatBar
 
 final class ProxyGroupPresentationStateTests: XCTestCase {
+    func testSettingProxyGroupsKeepsIndexInSyncImmediately() {
+        var state = ProxyGroupPresentationState()
+
+        state.proxyGroups = [
+            ProxyGroup(name: "A", all: ["n1"], hidden: false, latestDelay: 10),
+            ProxyGroup(name: "B", all: ["n2"], hidden: false, latestDelay: 20),
+        ]
+
+        XCTAssertEqual(state.proxyGroupIndex["A"]?.all, ["n1"])
+        XCTAssertEqual(state.proxyGroupIndex["B"]?.all, ["n2"])
+    }
+
     func testRebuildGroupIndexKeepsLatestGroupForDuplicateName() {
         var state = ProxyGroupPresentationState(
             proxyGroups: [

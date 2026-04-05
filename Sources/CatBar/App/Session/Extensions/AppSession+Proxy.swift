@@ -438,10 +438,8 @@ extension AppSession {
     }
 
     private func proxyGroup(named name: String) -> ProxyGroup? {
-        if self.presentedProxyGroup(named: name) == nil, !self.proxyGroups.isEmpty {
-            self.rebuildProxyGroupIndex()
-        }
-        return self.presentedProxyGroup(named: name)
+        self.presentedProxyGroup(named: name)
+            ?? self.proxyGroups.last(where: { $0.name == name })
     }
 
     private func refreshResolvedGroupLatencies(startingFrom rootGroups: [ProxyGroup]) async {
