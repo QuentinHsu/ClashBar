@@ -418,6 +418,54 @@ struct SettingsPresentationState {
     }
 }
 
+struct RuntimeMetricsPresentationState {
+    var traffic = TrafficSnapshot(up: 0, down: 0)
+    var memory = MemorySnapshot(inuse: 0)
+    var displayUpTotal: Int64 = 0
+    var displayDownTotal: Int64 = 0
+    var trafficHistoryUp: [Int64] = []
+    var trafficHistoryDown: [Int64] = []
+    var lastTrafficSampleAt: Date?
+
+    mutating func clearTrafficHistory(historyMaxPoints: Int) {
+        self.displayUpTotal = 0
+        self.displayDownTotal = 0
+        self.trafficHistoryUp = []
+        self.trafficHistoryDown = []
+        self.trafficHistoryUp.reserveCapacity(historyMaxPoints)
+        self.trafficHistoryDown.reserveCapacity(historyMaxPoints)
+        self.lastTrafficSampleAt = nil
+    }
+
+    mutating func appendTrafficHistory(up: Int64, down: Int64, historyMaxPoints: Int) {
+        self.trafficHistoryUp.append(max(0, up))
+        self.trafficHistoryDown.append(max(0, down))
+
+        if self.trafficHistoryUp.count > historyMaxPoints {
+            self.trafficHistoryUp.removeFirst(self.trafficHistoryUp.count - historyMaxPoints)
+        }
+        if self.trafficHistoryDown.count > historyMaxPoints {
+            self.trafficHistoryDown.removeFirst(self.trafficHistoryDown.count - historyMaxPoints)
+        }
+    }
+
+    mutating func updateTrafficTotals(from snapshot: TrafficSnapshot, now: Date) {
+        if let upTotal = snapshot.upTotal, let downTotal = snapshot.downTotal {
+            self.displayUpTotal = max(0, upTotal)
+            self.displayDownTotal = max(0, downTotal)
+            self.lastTrafficSampleAt = now
+            return
+        }
+
+        if let last = self.lastTrafficSampleAt {
+            let delta = max(0, now.timeIntervalSince(last))
+            self.displayUpTotal += Int64(Double(max(0, snapshot.up)) * delta)
+            self.displayDownTotal += Int64(Double(max(0, snapshot.down)) * delta)
+        }
+        self.lastTrafficSampleAt = now
+    }
+}
+
 struct SystemProxyPresentationState {
     var isEnabled: Bool = false
     var enableIntentInFlight: Bool = false

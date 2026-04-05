@@ -15,15 +15,7 @@ final class AppSession: ObservableObject {
     @Published var controllerUIURL: String = "http://127.0.0.1:9090/ui"
     @Published var controllerSecret: String?
 
-    @Published var traffic = TrafficSnapshot(up: 0, down: 0) {
-        didSet { self.refreshMenuBarDisplaySnapshotIfNeeded() }
-    }
-
-    @Published var memory = MemorySnapshot(inuse: 0)
-    @Published var displayUpTotal: Int64 = 0
-    @Published var displayDownTotal: Int64 = 0
-    @Published var trafficHistoryUp: [Int64] = []
-    @Published var trafficHistoryDown: [Int64] = []
+    @Published private var runtimeMetricsPresentationState = RuntimeMetricsPresentationState()
 
     var connectionsCount: Int {
         self.connectionsStore.connectionsCount
@@ -150,6 +142,21 @@ final class AppSession: ObservableObject {
 
     func clearPresentedLogs(keepingCapacity: Bool) {
         self.logPresentationState.clear(keepingCapacity: keepingCapacity)
+    }
+
+    func clearPresentedTrafficHistory(historyMaxPoints: Int) {
+        self.runtimeMetricsPresentationState.clearTrafficHistory(historyMaxPoints: historyMaxPoints)
+    }
+
+    func appendPresentedTrafficHistory(up: Int64, down: Int64, historyMaxPoints: Int) {
+        self.runtimeMetricsPresentationState.appendTrafficHistory(
+            up: up,
+            down: down,
+            historyMaxPoints: historyMaxPoints)
+    }
+
+    func updatePresentedTrafficTotals(from snapshot: TrafficSnapshot, now: Date) {
+        self.runtimeMetricsPresentationState.updateTrafficTotals(from: snapshot, now: now)
     }
 
     func trimPresentedLogs(to maxEntries: Int) {
@@ -350,6 +357,44 @@ final class AppSession: ObservableObject {
 
     var isRemoteTarget: Bool {
         !self.remoteMachineStore.activeTarget.isLocal
+    }
+
+    var traffic: TrafficSnapshot {
+        get { self.runtimeMetricsPresentationState.traffic }
+        set {
+            self.runtimeMetricsPresentationState.traffic = newValue
+            self.refreshMenuBarDisplaySnapshotIfNeeded()
+        }
+    }
+
+    var memory: MemorySnapshot {
+        get { self.runtimeMetricsPresentationState.memory }
+        set { self.runtimeMetricsPresentationState.memory = newValue }
+    }
+
+    var displayUpTotal: Int64 {
+        get { self.runtimeMetricsPresentationState.displayUpTotal }
+        set { self.runtimeMetricsPresentationState.displayUpTotal = newValue }
+    }
+
+    var displayDownTotal: Int64 {
+        get { self.runtimeMetricsPresentationState.displayDownTotal }
+        set { self.runtimeMetricsPresentationState.displayDownTotal = newValue }
+    }
+
+    var trafficHistoryUp: [Int64] {
+        get { self.runtimeMetricsPresentationState.trafficHistoryUp }
+        set { self.runtimeMetricsPresentationState.trafficHistoryUp = newValue }
+    }
+
+    var trafficHistoryDown: [Int64] {
+        get { self.runtimeMetricsPresentationState.trafficHistoryDown }
+        set { self.runtimeMetricsPresentationState.trafficHistoryDown = newValue }
+    }
+
+    var lastTrafficSampleAt: Date? {
+        get { self.runtimeMetricsPresentationState.lastTrafficSampleAt }
+        set { self.runtimeMetricsPresentationState.lastTrafficSampleAt = newValue }
     }
 
     var isModeSwitchEnabled: Bool {
@@ -754,7 +799,6 @@ final class AppSession: ObservableObject {
     var trafficDecodeTask: Task<Void, Never>?
     var mihomoLogFlushTask: Task<Void, Never>?
     var providerRefreshGeneration: Int = 0
-    var lastTrafficSampleAt: Date?
     var lastTrafficDecodeAt: Date = .distantPast
     var pendingTrafficPayload: Data?
     var pendingMihomoLogs: [AppErrorLogEntry] = []

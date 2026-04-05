@@ -236,13 +236,7 @@ extension AppSession {
     }
 
     func clearTrafficPresentationHistory() {
-        displayUpTotal = 0
-        displayDownTotal = 0
-        trafficHistoryUp = []
-        trafficHistoryDown = []
-        trafficHistoryUp.reserveCapacity(historyMaxPoints)
-        trafficHistoryDown.reserveCapacity(historyMaxPoints)
-        lastTrafficSampleAt = nil
+        self.clearPresentedTrafficHistory(historyMaxPoints: historyMaxPoints)
     }
 
     private func releasePanelCachedData() {
@@ -258,32 +252,14 @@ extension AppSession {
     }
 
     func appendTrafficHistory(up: Int64, down: Int64) {
-        trafficHistoryUp.append(max(0, up))
-        trafficHistoryDown.append(max(0, down))
-
-        if trafficHistoryUp.count > historyMaxPoints {
-            trafficHistoryUp.removeFirst(trafficHistoryUp.count - historyMaxPoints)
-        }
-        if trafficHistoryDown.count > historyMaxPoints {
-            trafficHistoryDown.removeFirst(trafficHistoryDown.count - historyMaxPoints)
-        }
+        self.appendPresentedTrafficHistory(
+            up: up,
+            down: down,
+            historyMaxPoints: historyMaxPoints)
     }
 
     func updateTrafficTotals(from snapshot: TrafficSnapshot) {
-        if let upTotal = snapshot.upTotal, let downTotal = snapshot.downTotal {
-            displayUpTotal = max(0, upTotal)
-            displayDownTotal = max(0, downTotal)
-            lastTrafficSampleAt = Date()
-            return
-        }
-
-        let now = Date()
-        if let last = lastTrafficSampleAt {
-            let delta = max(0, now.timeIntervalSince(last))
-            displayUpTotal += Int64(Double(max(0, snapshot.up)) * delta)
-            displayDownTotal += Int64(Double(max(0, snapshot.down)) * delta)
-        }
-        lastTrafficSampleAt = now
+        self.updatePresentedTrafficTotals(from: snapshot, now: Date())
     }
 
     private func refreshLowFrequency() async {
