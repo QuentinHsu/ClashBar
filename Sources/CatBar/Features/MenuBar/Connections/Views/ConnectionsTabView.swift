@@ -141,125 +141,65 @@ extension MenuBarRootView {
     }
 
     func connectionRow(_ conn: ConnectionSummary) -> some View {
-        let visual = self.connectionVisual(for: conn)
-        let hovered = self.connectionsViewModel.hoveredConnectionID == conn.id
-        let hostText = conn.metadata?.host.trimmedNonEmpty
-            ?? conn.metadata?.destinationIP.trimmedNonEmpty
-            ?? tr("ui.common.na")
-        let networkType = conn.metadata?.network.trimmedNonEmpty?.uppercased() ?? "--"
-        let timeText = self.connectionTimeOnly(conn.start)
-        let upText = ValueFormatter.bytesCompactNoSpace(conn.upload ?? 0)
-        let downText = ValueFormatter.bytesCompactNoSpace(conn.download ?? 0)
-        let parsedRule = self.connectionRulePresentationResolver.parseRule(conn.rule)
-        let ruleTypeText = self.connectionRulePresentationResolver.ruleTypeText(
-            raw: conn.rule,
-            fallback: parsedRule?.type)
-        let rulePayloadText = conn.rulePayload.trimmedNonEmpty
-            ?? parsedRule?.payload.trimmedNonEmpty
-            ?? "--"
+        let model = self.connectionRowDisplayModel(conn)
 
-        return HStack(alignment: .center, spacing: MenuBarLayoutTokens.space6) {
-            Image(systemName: visual.symbol)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.body, weight: .semibold))
-                .foregroundStyle(visual.color)
-                .frame(
-                    width: MenuBarLayoutTokens.rowLeadingIcon,
-                    height: MenuBarLayoutTokens.rowLeadingIcon,
-                    alignment: .center)
-
-            VStack(alignment: .leading, spacing: MenuBarLayoutTokens.space2) {
-                self.connectionRowTopLine(host: hostText, ruleType: ruleTypeText, rulePayload: rulePayloadText)
-                self.connectionRowMetrics(time: timeText, network: networkType, up: upText, down: downText)
-                self.connectionsChainsLine(parts: self.connectionRulePresentationResolver.chainsParts(conn.chains))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            self.connectionRowCloseButton(id: conn.id, hovered: hovered)
-        }
-        .padding(.horizontal, MenuBarLayoutTokens.space4)
-        .padding(.vertical, MenuBarLayoutTokens.space2)
-        .background(nativeHoverRowBackground(hovered))
+        return ConnectionRowView(
+            model: model,
+            primaryLabel: self.nativePrimaryLabel,
+            secondaryLabel: self.nativeSecondaryLabel,
+            tertiaryLabel: self.nativeTertiaryLabel,
+            infoColor: self.nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid),
+            positiveColor: self.nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid),
+            hoverFill: self.nativeHoverFill,
+            onClose: { Task { await appSession.closeConnection(id: conn.id) } })
         .onHover { self.connectionsViewModel.hoveredConnectionID = self.nextHovered(
             current: self.connectionsViewModel.hoveredConnectionID, target: conn.id, isHovering: $0) }
         .contextMenu { self.connectionRowContextMenu(conn) }
     }
 
-    private func connectionRowTopLine(host: String, ruleType: String, rulePayload: String) -> some View {
-        // Use static rowContentWidth constant — no GeometryReader needed since panel is always 360pt
+    private func connectionRowDisplayModel(_ conn: ConnectionSummary) -> ConnectionRowDisplayModel {
+        let visual = self.connectionVisual(for: conn)
+        let parsedRule = self.connectionRulePresentationResolver.parseRule(conn.rule)
+        let ruleTypeText = self.connectionRulePresentationResolver.ruleTypeText(
+            raw: conn.rule,
+            fallback: parsedRule?.type)
+        let rulePayloadText = conn.rulePayload.trimmedNonEmpty
+            ?? parsedRule?.payload?.trimmedNonEmpty
+            ?? "--"
         let layout = self.connectionsTopLineLayoutResolver.resolve(
             totalWidth: ConnectionsLayout.rowContentWidth,
             desiredRuleWidth: max(
                 ConnectionsLayout.topRuleMinWidth,
                 self.connectionsMonospacedTextWidth(
-                    ruleType,
+                    ruleTypeText,
                     size: MenuBarLayoutTokens.FontSize.caption,
                     weight: .semibold) + 4),
             desiredPayloadWidth: max(
                 ConnectionsLayout.topPayloadMinWidth,
                 self.connectionsMonospacedTextWidth(
-                    rulePayload,
+                    rulePayloadText,
                     size: MenuBarLayoutTokens.FontSize.caption,
                     weight: .medium)))
 
-        return HStack(spacing: ConnectionsLayout.topLineSpacing) {
-            Text(host)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.body, weight: .semibold))
-                .foregroundStyle(nativePrimaryLabel)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: layout.hostWidth, alignment: .leading)
-
-            HStack(spacing: ConnectionsLayout.topMetaSpacing) {
-                self.connectionsTopBadge(text: ruleType)
-                    .frame(width: layout.ruleWidth, alignment: .trailing)
-                self.connectionsTopPayload(text: rulePayload)
-                    .frame(width: layout.payloadWidth, alignment: .trailing)
-            }
-            .frame(
-                width: layout.ruleWidth + ConnectionsLayout.topMetaSpacing + layout.payloadWidth,
-                alignment: .trailing)
-        }
-        .frame(height: ConnectionsLayout.rowLineHeight)
-    }
-
-    private func connectionRowMetrics(time: String, network: String, up: String, down: String) -> some View {
-        return HStack(spacing: 0) {
-            // Left: time · network (plain text, no icons)
-            Text(time.isEmpty ? tr("ui.common.na") : time)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
-                .foregroundStyle(nativeSecondaryLabel)
-
-            Text(" · ")
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
-                .foregroundStyle(nativeTertiaryLabel)
-
-            Text(network.isEmpty ? tr("ui.common.na") : network)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
-                .foregroundStyle(self.connectionNetworkColor(network))
-
-            Spacer(minLength: MenuBarLayoutTokens.space4)
-
-            // Right: ↑upload ↓download
-            HStack(spacing: MenuBarLayoutTokens.space4) {
-                HStack(spacing: 0) {
-                    Image(systemName: "arrow.up")
-                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
-                        .foregroundStyle(nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid))
-                    Text(up)
-                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
-                        .foregroundStyle(nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid))
-                }
-                HStack(spacing: 0) {
-                    Image(systemName: "arrow.down")
-                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
-                        .foregroundStyle(nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid))
-                    Text(down)
-                        .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
-                        .foregroundStyle(nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid))
-                }
-            }
-        }
-        .frame(height: ConnectionsLayout.rowLineHeight)
+        return ConnectionRowDisplayModel(
+            id: conn.id,
+            symbolName: visual.symbol,
+            symbolColor: visual.color,
+            hostText: conn.metadata?.host.trimmedNonEmpty
+                ?? conn.metadata?.destinationIP.trimmedNonEmpty
+                ?? tr("ui.common.na"),
+            ruleTypeText: ruleTypeText,
+            rulePayloadText: rulePayloadText,
+            hostWidth: layout.hostWidth,
+            ruleWidth: layout.ruleWidth,
+            payloadWidth: layout.payloadWidth,
+            timeText: self.connectionTimeOnly(conn.start),
+            networkText: conn.metadata?.network.trimmedNonEmpty?.uppercased() ?? "--",
+            networkColor: self.connectionNetworkColor(conn.metadata?.network.trimmedNonEmpty?.uppercased() ?? "--"),
+            upText: ValueFormatter.bytesCompactNoSpace(conn.upload ?? 0),
+            downText: ValueFormatter.bytesCompactNoSpace(conn.download ?? 0),
+            chainParts: self.connectionRulePresentationResolver.chainsParts(conn.chains),
+            hovered: self.connectionsViewModel.hoveredConnectionID == conn.id)
     }
 
     private func connectionNetworkColor(_ network: String) -> Color {
@@ -268,20 +208,6 @@ extension MenuBarRootView {
         case "TCP": return nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid)
         default: return nativeSecondaryLabel
         }
-    }
-
-    private func connectionRowCloseButton(id: String, hovered: Bool) -> some View {
-        Button {
-            Task { await appSession.closeConnection(id: id) }
-        } label: {
-            Image(systemName: "xmark")
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
-                .frame(width: 10, height: 10)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(hovered ? nativeSecondaryLabel : nativeTertiaryLabel)
-        .frame(width: 12, height: 12)
-        .opacity(hovered ? 1 : 0)
     }
 
     @ViewBuilder
@@ -332,41 +258,6 @@ extension MenuBarRootView {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(width: width, alignment: .leading)
-    }
-
-    func connectionsTopBadge(text: String) -> some View {
-        Text(text)
-            .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
-            .foregroundStyle(nativeSecondaryLabel)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .minimumScaleFactor(MenuBarLayoutTokens.minimumScale)
-            .padding(.horizontal, MenuBarLayoutTokens.space2)
-            .padding(.vertical, MenuBarLayoutTokens.space1)
-            .background(nativeBadgeCapsule())
-    }
-
-    func connectionsTopPayload(text: String) -> some View {
-        Text(text)
-            .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .medium))
-            .foregroundStyle(nativeSecondaryLabel)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .minimumScaleFactor(MenuBarLayoutTokens.minimumScale)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    func connectionsChainsLine(parts: [String]) -> some View {
-        let chainText = parts.joined(separator: " › ")
-        let displayText = parts.isEmpty ? tr("ui.common.na") : chainText
-
-        return Text(displayText)
-            .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
-            .foregroundStyle(nativeSecondaryLabel)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: ConnectionsLayout.rowLineHeight, alignment: .leading)
     }
 
     func connectionsMonospacedTextWidth(_ text: String, size: CGFloat, weight: NSFont.Weight) -> CGFloat {
