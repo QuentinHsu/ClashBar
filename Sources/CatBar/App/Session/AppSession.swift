@@ -63,24 +63,7 @@ final class AppSession: ObservableObject {
     @Published var proxyHistoryLatestDelay: [String: Int] = [:]
     @Published var proxyNodeTypes: [String: String] = [:]
     @Published var proxyNodeIDs: [String: String] = [:]
-
-    @Published var providerProxyCount: Int = 0
-    @Published var providerRuleCount: Int = 0
-    @Published var rulesCount: Int = 0
-    @Published var proxyProvidersDetail: [String: ProviderDetail] = [:] {
-        didSet {
-            self.sortedProxyProviderNames = self.proxyProvidersDetail.keys.sorted {
-                $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
-            }
-        }
-    }
-
-    private(set) var sortedProxyProviderNames: [String] = []
-    @Published var providerUpdating: Set<String> = []
-    @Published var isProxyProvidersRefreshing: Bool = false
-    @Published var ruleProviders: [String: ProviderDetail] = [:]
-    @Published var ruleItems: [RuleItem] = []
-    @Published var isRuleProvidersRefreshing: Bool = false
+    @Published private var providerPresentationState = ProviderPresentationState()
 
     @Published var isSystemProxyEnabled: Bool = false
     @Published var systemProxyEnableIntentInFlight: Bool = false
@@ -255,6 +238,55 @@ final class AppSession: ObservableObject {
 
     var isModeSwitchEnabled: Bool {
         (self.isRemoteTarget || self.coreRepository.isRunning) && self.apiStatus == .healthy
+    }
+
+    var providerProxyCount: Int {
+        get { self.providerPresentationState.providerProxyCount }
+        set { self.providerPresentationState.providerProxyCount = newValue }
+    }
+
+    var providerRuleCount: Int {
+        get { self.providerPresentationState.providerRuleCount }
+        set { self.providerPresentationState.providerRuleCount = newValue }
+    }
+
+    var rulesCount: Int {
+        get { self.providerPresentationState.rulesCount }
+        set { self.providerPresentationState.rulesCount = newValue }
+    }
+
+    var proxyProvidersDetail: [String: ProviderDetail] {
+        get { self.providerPresentationState.proxyProvidersDetail }
+        set { self.providerPresentationState.proxyProvidersDetail = newValue }
+    }
+
+    var sortedProxyProviderNames: [String] {
+        self.providerPresentationState.sortedProxyProviderNames
+    }
+
+    var providerUpdating: Set<String> {
+        get { self.providerPresentationState.providerUpdating }
+        set { self.providerPresentationState.providerUpdating = newValue }
+    }
+
+    var isProxyProvidersRefreshing: Bool {
+        get { self.providerPresentationState.isProxyProvidersRefreshing }
+        set { self.providerPresentationState.isProxyProvidersRefreshing = newValue }
+    }
+
+    var ruleProviders: [String: ProviderDetail] {
+        get { self.providerPresentationState.ruleProviders }
+        set { self.providerPresentationState.ruleProviders = newValue }
+    }
+
+    var ruleItems: [RuleItem] {
+        get { self.providerPresentationState.ruleItems }
+        set { self.providerPresentationState.ruleItems = newValue }
+    }
+
+    var isRuleProvidersRefreshing: Bool {
+        get { self.providerPresentationState.isRuleProvidersRefreshing }
+        set { self.providerPresentationState.isRuleProvidersRefreshing = newValue }
     }
 
     var isTunToggleEnabled: Bool {

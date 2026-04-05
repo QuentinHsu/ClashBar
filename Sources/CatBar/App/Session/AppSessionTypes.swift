@@ -136,6 +136,25 @@ struct ProviderRefreshStatus {
         updatedAt: nil)
 }
 
+struct ProviderPresentationState {
+    var providerProxyCount: Int = 0
+    var providerRuleCount: Int = 0
+    var rulesCount: Int = 0
+    var proxyProvidersDetail: [String: ProviderDetail] = [:] {
+        didSet {
+            self.sortedProxyProviderNames = self.proxyProvidersDetail.keys.sorted {
+                $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+            }
+        }
+    }
+    var sortedProxyProviderNames: [String] = []
+    var providerUpdating: Set<String> = []
+    var isProxyProvidersRefreshing: Bool = false
+    var ruleProviders: [String: ProviderDetail] = [:]
+    var ruleItems: [RuleItem] = []
+    var isRuleProvidersRefreshing: Bool = false
+}
+
 struct MenuBarSpeedLines: Equatable {
     let up: String
     let down: String
