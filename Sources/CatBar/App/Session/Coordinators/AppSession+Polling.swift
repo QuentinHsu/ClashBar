@@ -256,13 +256,7 @@ extension AppSession {
         self.clearPresentedProxyGroups(keepingCapacity: false)
         clearMeasuredProxyDelays()
 
-        providerProxyCount = 0
-        providerRuleCount = 0
-        rulesCount = 0
-        proxyProvidersDetail.removeAll(keepingCapacity: false)
-        providerUpdating.removeAll(keepingCapacity: false)
-        ruleProviders.removeAll(keepingCapacity: false)
-        ruleItems.removeAll(keepingCapacity: false)
+        self.clearPresentedProviderCollections(keepingCapacity: false)
     }
 
     func appendTrafficHistory(up: Int64, down: Int64) {

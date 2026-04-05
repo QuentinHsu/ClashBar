@@ -11,17 +11,18 @@ extension AppSession {
     }
 
     func refreshLaunchAtLoginStatus() {
-        launchAtLoginEnabled = self.readLaunchAtLoginEnabledUseCase.execute()
+        self.syncPresentedLaunchAtLoginEnabled(self.readLaunchAtLoginEnabledUseCase.execute())
     }
 
     func applyLaunchAtLogin(_ enabled: Bool) {
-        launchAtLoginErrorMessage = nil
+        self.clearPresentedLaunchAtLoginError()
 
         do {
-            launchAtLoginEnabled = try self.setLaunchAtLoginEnabledUseCase.execute(enabled)
+            self.syncPresentedLaunchAtLoginEnabled(try self.setLaunchAtLoginEnabledUseCase.execute(enabled))
         } catch {
-            launchAtLoginEnabled = self.readLaunchAtLoginEnabledUseCase.execute()
-            launchAtLoginErrorMessage = self.launchAtLoginMessage(for: error)
+            self.applyPresentedLaunchAtLoginFailure(
+                enabled: self.readLaunchAtLoginEnabledUseCase.execute(),
+                message: self.launchAtLoginMessage(for: error))
             appendLog(level: "error", message: tr("log.launch_at_login.toggle_failed", error.localizedDescription))
         }
     }

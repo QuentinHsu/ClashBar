@@ -61,15 +61,13 @@ final class AppSession: ObservableObject {
     @Published var startupErrorMessage: String?
     @Published var coreActionState: CoreActionState = .idle
     @Published var coreUpgradeState: CoreUpgradeState = .idle
-    @Published var providerRefreshStatus: ProviderRefreshStatus = .idle
     @Published var uiLanguage: AppLanguage = .zhHans
     @Published var appearanceMode: AppAppearanceMode = .system
     @Published var isPanelPresented: Bool = false
     @Published var isQuittingApp: Bool = false
     @Published var activeMenuTab: RootTab = .proxy
-    @Published var launchAtLoginEnabled: Bool = false
-    @Published var launchAtLoginErrorMessage: String?
-    @Published var latestAppReleaseInfo: AppReleaseInfo?
+    @Published private var launchAtLoginPresentationState = LaunchAtLoginPresentationState()
+    @Published private var appReleasePresentationState = AppReleasePresentationState()
     @Published private(set) var menuBarDisplaySnapshot = MenuBarDisplay(
         mode: .iconOnly,
         symbolName: "bolt.slash.circle",
@@ -279,6 +277,71 @@ final class AppSession: ObservableObject {
         self.settingsPresentationState.syncEditableFields(from: previous, to: incoming)
     }
 
+    func insertPresentedUpdatingProviderNames(_ names: [String]) -> Set<String> {
+        self.providerPresentationState.insertUpdatingProviderNames(names)
+    }
+
+    func beginPresentedUpdatingProvider(_ name: String) -> Bool {
+        self.providerPresentationState.beginUpdatingProvider(name)
+    }
+
+    func endPresentedUpdatingProvider(_ name: String) {
+        self.providerPresentationState.endUpdatingProvider(name)
+    }
+
+    func retainPresentedUpdatingProviderNames(in currentNames: Set<String>) {
+        self.providerPresentationState.retainUpdatingProviderNames(in: currentNames)
+    }
+
+    func clearPresentedProviderCollections(keepingCapacity: Bool) {
+        self.providerPresentationState.clearCollections(keepingCapacity: keepingCapacity)
+    }
+
+    func updatePresentedProviderRefreshStatus(
+        phase: ProviderRefreshPhase,
+        trigger: ProviderRefreshTrigger?,
+        progressDone: Int,
+        progressTotal: Int,
+        message: String?,
+        updatedAt: Date = Date())
+    {
+        self.providerPresentationState.updateRefreshStatus(
+            phase: phase,
+            trigger: trigger,
+            progressDone: progressDone,
+            progressTotal: progressTotal,
+            message: message,
+            updatedAt: updatedAt)
+    }
+
+    func beginPresentedLatestAppReleaseCheck() -> Bool {
+        self.appReleasePresentationState.beginCheckingLatestRelease()
+    }
+
+    func endPresentedLatestAppReleaseCheck() {
+        self.appReleasePresentationState.endCheckingLatestRelease()
+    }
+
+    func updatePresentedLatestAppReleaseIfChanged(_ release: AppReleaseInfo) -> Bool {
+        self.appReleasePresentationState.updateLatestReleaseIfChanged(release)
+    }
+
+    func presentedAvailableAppUpdate(currentVersion: String) -> AppReleaseInfo? {
+        self.appReleasePresentationState.availableUpdate(currentVersion: currentVersion)
+    }
+
+    func syncPresentedLaunchAtLoginEnabled(_ enabled: Bool) {
+        self.launchAtLoginPresentationState.syncEnabled(enabled)
+    }
+
+    func clearPresentedLaunchAtLoginError() {
+        self.launchAtLoginPresentationState.clearError()
+    }
+
+    func applyPresentedLaunchAtLoginFailure(enabled: Bool, message: String) {
+        self.launchAtLoginPresentationState.applyFailure(enabled: enabled, message: message)
+    }
+
     func clearPresentedSystemProxyOpenFailureHint() {
         self.systemProxyPresentationState.clearOpenFailureHint()
     }
@@ -394,6 +457,11 @@ final class AppSession: ObservableObject {
     var rulesCount: Int {
         get { self.providerPresentationState.rulesCount }
         set { self.providerPresentationState.rulesCount = newValue }
+    }
+
+    var providerRefreshStatus: ProviderRefreshStatus {
+        get { self.providerPresentationState.providerRefreshStatus }
+        set { self.providerPresentationState.providerRefreshStatus = newValue }
     }
 
     var proxyProvidersDetail: [String: ProviderDetail] {
@@ -535,6 +603,26 @@ final class AppSession: ObservableObject {
         set { self.settingsPresentationState.savedMessage = newValue }
     }
 
+    var latestAppReleaseInfo: AppReleaseInfo? {
+        get { self.appReleasePresentationState.latestReleaseInfo }
+        set { self.appReleasePresentationState.latestReleaseInfo = newValue }
+    }
+
+    var launchAtLoginEnabled: Bool {
+        get { self.launchAtLoginPresentationState.isEnabled }
+        set { self.launchAtLoginPresentationState.isEnabled = newValue }
+    }
+
+    var launchAtLoginErrorMessage: String? {
+        get { self.launchAtLoginPresentationState.errorMessage }
+        set { self.launchAtLoginPresentationState.errorMessage = newValue }
+    }
+
+    var isLatestAppReleaseCheckInFlight: Bool {
+        get { self.appReleasePresentationState.isCheckingLatestRelease }
+        set { self.appReleasePresentationState.isCheckingLatestRelease = newValue }
+    }
+
     var lastSyncedEditableSettings: EditableSettingsSnapshot? {
         get { self.settingsPresentationState.lastSyncedEditableSettings }
         set { self.settingsPresentationState.lastSyncedEditableSettings = newValue }
@@ -643,8 +731,6 @@ final class AppSession: ObservableObject {
     var activatedTabRefreshGeneration: Int = 0
     var configFileSignatureSnapshot: [String: String] = [:]
     var pendingConfigChangeRestart = false
-    @Published var isLatestAppReleaseCheckInFlight: Bool = false
-
     let defaults = UserDefaults.standard
     @AppStorage("catbar.auto.start.core") private var autoStartCore: Bool = false
     @AppStorage("catbar.auto.core.network.recovery") private var autoCoreControlOnNetworkChange: Bool = true

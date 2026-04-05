@@ -11,15 +11,7 @@ extension AppSession {
     }
 
     var availableAppUpdate: AppReleaseInfo? {
-        guard let latestAppReleaseInfo else { return nil }
-        guard !latestAppReleaseInfo.isDraft, !latestAppReleaseInfo.isPrerelease else { return nil }
-        guard AppSemanticVersion.isNewerRelease(
-            tagName: latestAppReleaseInfo.tagName,
-            than: self.currentAppVersionText)
-        else {
-            return nil
-        }
-        return latestAppReleaseInfo
+        self.presentedAvailableAppUpdate(currentVersion: self.currentAppVersionText)
     }
 
     var appReleaseIndexURL: URL? {
@@ -40,18 +32,16 @@ extension AppSession {
     }
 
     func refreshLatestAppRelease() async {
-        guard !self.isLatestAppReleaseCheckInFlight else { return }
+        guard self.beginPresentedLatestAppReleaseCheck() else { return }
 
-        self.isLatestAppReleaseCheckInFlight = true
         defer {
-            self.isLatestAppReleaseCheckInFlight = false
+            self.endPresentedLatestAppReleaseCheck()
         }
 
         do {
             let release = try await AppReleaseService.fetchLatestRelease(currentVersion: self.currentAppVersionText)
             guard !Task.isCancelled else { return }
-            guard self.latestAppReleaseInfo != release else { return }
-            self.latestAppReleaseInfo = release
+            _ = self.updatePresentedLatestAppReleaseIfChanged(release)
         } catch {
             guard !Task.isCancelled else { return }
         }

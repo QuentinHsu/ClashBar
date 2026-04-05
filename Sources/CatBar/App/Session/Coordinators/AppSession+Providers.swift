@@ -70,9 +70,8 @@ extension AppSession {
         do {
             let summary = try await self.providersRepository().fetchProxyProviders()
             let names = summary.providers.keys.sorted()
-            let insertedNames = Set(names).subtracting(self.providerUpdating)
-            self.providerUpdating.formUnion(insertedNames)
-            defer { self.providerUpdating.subtract(insertedNames) }
+            let insertedNames = self.insertPresentedUpdatingProviderNames(names)
+            defer { insertedNames.forEach { self.endPresentedUpdatingProvider($0) } }
 
             _ = await self.updateProvidersSequential(
                 names: names,
@@ -91,9 +90,8 @@ extension AppSession {
     }
 
     func updateProxyProvider(name: String) async {
-        guard !providerUpdating.contains(name) else { return }
-        providerUpdating.insert(name)
-        defer { providerUpdating.remove(name) }
+        guard self.beginPresentedUpdatingProvider(name) else { return }
+        defer { self.endPresentedUpdatingProvider(name) }
 
         await self.runSingleProviderUpdate(
             actionName: tr("log.action_name.update_proxy_provider", name),
@@ -270,7 +268,7 @@ extension AppSession {
 
     private func updateProviderRefreshStatus(_ update: ProviderRefreshStatusUpdate) {
         guard update.generation == providerRefreshGeneration else { return }
-        providerRefreshStatus = ProviderRefreshStatus(
+        self.updatePresentedProviderRefreshStatus(
             phase: update.phase,
             trigger: update.trigger,
             progressDone: update.progressDone,
@@ -308,7 +306,7 @@ extension AppSession {
             self.rulesCount = rules.totalCount
 
             let currentNames = Set(filteredProxyProviders.keys)
-            self.providerUpdating = self.providerUpdating.intersection(currentNames)
+            self.retainPresentedUpdatingProviderNames(in: currentNames)
         }
     }
 

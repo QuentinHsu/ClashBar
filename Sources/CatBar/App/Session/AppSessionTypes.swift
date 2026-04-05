@@ -153,6 +153,52 @@ struct ProviderPresentationState {
     var ruleProviders: [String: ProviderDetail] = [:]
     var ruleItems: [RuleItem] = []
     var isRuleProvidersRefreshing: Bool = false
+    var providerRefreshStatus: ProviderRefreshStatus = .idle
+
+    mutating func insertUpdatingProviderNames(_ names: [String]) -> Set<String> {
+        let insertedNames = Set(names).subtracting(self.providerUpdating)
+        self.providerUpdating.formUnion(insertedNames)
+        return insertedNames
+    }
+
+    mutating func beginUpdatingProvider(_ name: String) -> Bool {
+        self.providerUpdating.insert(name).inserted
+    }
+
+    mutating func endUpdatingProvider(_ name: String) {
+        self.providerUpdating.remove(name)
+    }
+
+    mutating func retainUpdatingProviderNames(in currentNames: Set<String>) {
+        self.providerUpdating = self.providerUpdating.intersection(currentNames)
+    }
+
+    mutating func clearCollections(keepingCapacity: Bool) {
+        self.providerProxyCount = 0
+        self.providerRuleCount = 0
+        self.rulesCount = 0
+        self.proxyProvidersDetail.removeAll(keepingCapacity: keepingCapacity)
+        self.providerUpdating.removeAll(keepingCapacity: keepingCapacity)
+        self.ruleProviders.removeAll(keepingCapacity: keepingCapacity)
+        self.ruleItems.removeAll(keepingCapacity: keepingCapacity)
+    }
+
+    mutating func updateRefreshStatus(
+        phase: ProviderRefreshPhase,
+        trigger: ProviderRefreshTrigger?,
+        progressDone: Int,
+        progressTotal: Int,
+        message: String?,
+        updatedAt: Date)
+    {
+        self.providerRefreshStatus = ProviderRefreshStatus(
+            phase: phase,
+            trigger: trigger,
+            progressDone: progressDone,
+            progressTotal: progressTotal,
+            message: message,
+            updatedAt: updatedAt)
+    }
 }
 
 struct ConfigPresentationState {
@@ -410,6 +456,54 @@ struct SystemProxyPresentationState {
         self.helperFailureReason = snapshot.failureReason
         self.helperFailureMessage = snapshot.rawMessage
         return previous
+    }
+}
+
+struct AppReleasePresentationState {
+    var latestReleaseInfo: AppReleaseInfo?
+    var isCheckingLatestRelease = false
+
+    mutating func beginCheckingLatestRelease() -> Bool {
+        guard !self.isCheckingLatestRelease else { return false }
+        self.isCheckingLatestRelease = true
+        return true
+    }
+
+    mutating func endCheckingLatestRelease() {
+        self.isCheckingLatestRelease = false
+    }
+
+    mutating func updateLatestReleaseIfChanged(_ release: AppReleaseInfo) -> Bool {
+        guard self.latestReleaseInfo != release else { return false }
+        self.latestReleaseInfo = release
+        return true
+    }
+
+    func availableUpdate(currentVersion: String) -> AppReleaseInfo? {
+        guard let latestReleaseInfo else { return nil }
+        guard !latestReleaseInfo.isDraft, !latestReleaseInfo.isPrerelease else { return nil }
+        guard AppSemanticVersion.isNewerRelease(tagName: latestReleaseInfo.tagName, than: currentVersion) else {
+            return nil
+        }
+        return latestReleaseInfo
+    }
+}
+
+struct LaunchAtLoginPresentationState {
+    var isEnabled = false
+    var errorMessage: String?
+
+    mutating func syncEnabled(_ enabled: Bool) {
+        self.isEnabled = enabled
+    }
+
+    mutating func clearError() {
+        self.errorMessage = nil
+    }
+
+    mutating func applyFailure(enabled: Bool, message: String) {
+        self.isEnabled = enabled
+        self.errorMessage = message
     }
 }
 
