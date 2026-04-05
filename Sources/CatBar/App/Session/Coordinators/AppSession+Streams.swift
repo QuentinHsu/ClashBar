@@ -6,6 +6,10 @@ extension AppSession {
         ComputeNextStreamReconnectDelayUseCase()
     }
 
+    private var shouldIgnoreStreamErrorUseCase: ShouldIgnoreStreamErrorUseCase {
+        ShouldIgnoreStreamErrorUseCase()
+    }
+
     private var normalizeWebSocketPayloadUseCase: NormalizeWebSocketPayloadUseCase {
         NormalizeWebSocketPayloadUseCase()
     }
@@ -110,6 +114,7 @@ extension AppSession {
                 message = try await ws.receive()
             } catch {
                 if Task.isCancelled { return }
+                if self.shouldIgnoreStreamErrorUseCase.execute(error) { return }
                 let disconnectMessage = error.localizedDescription
                 if self.shouldLogStreamDisconnect(kind: kind, message: disconnectMessage) {
                     appendLog(level: "error", message: tr("log.stream.disconnected", tr(kind.label), disconnectMessage))
