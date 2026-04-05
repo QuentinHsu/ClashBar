@@ -507,6 +507,73 @@ struct LaunchAtLoginPresentationState {
     }
 }
 
+struct CoreControlPresentationState {
+    var startupErrorMessage: String?
+    var actionState: CoreActionState = .idle
+    var upgradeState: CoreUpgradeState = .idle
+
+    var isActionProcessing: Bool {
+        self.actionState != .idle
+    }
+
+    var isUpgradeInFlight: Bool {
+        if case .running = self.upgradeState {
+            return true
+        }
+        return false
+    }
+
+    mutating func beginAction(_ action: CoreActionState) -> Bool {
+        guard self.actionState == .idle else { return false }
+        self.actionState = action
+        return true
+    }
+
+    mutating func endAction() {
+        self.actionState = .idle
+    }
+
+    mutating func setStartupError(_ message: String?) {
+        self.startupErrorMessage = message
+    }
+
+    mutating func beginUpgrade() -> Bool {
+        guard !self.isUpgradeInFlight else { return false }
+        self.upgradeState = .running
+        return true
+    }
+
+    mutating func applyUpgradeState(_ state: CoreUpgradeState) {
+        self.upgradeState = state
+    }
+}
+
+struct InterfacePresentationState {
+    var uiLanguage: AppLanguage = .zhHans
+    var appearanceMode: AppAppearanceMode = .system
+    var isPanelPresented = false
+    var isQuittingApp = false
+    var activeMenuTab: RootTab = .proxy
+
+    mutating func setPanelPresented(_ presented: Bool) -> Bool {
+        guard self.isPanelPresented != presented else { return false }
+        self.isPanelPresented = presented
+        return true
+    }
+
+    mutating func setActiveMenuTab(_ tab: RootTab) -> Bool {
+        let changed = self.activeMenuTab != tab
+        self.activeMenuTab = tab
+        return changed
+    }
+
+    mutating func beginQuitting() -> Bool {
+        guard !self.isQuittingApp else { return false }
+        self.isQuittingApp = true
+        return true
+    }
+}
+
 struct MenuBarSpeedLines: Equatable {
     let up: String
     let down: String

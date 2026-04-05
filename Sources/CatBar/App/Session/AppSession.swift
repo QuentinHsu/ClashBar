@@ -58,14 +58,8 @@ final class AppSession: ObservableObject {
     }
 
     @Published private var logPresentationState = LogPresentationState()
-    @Published var startupErrorMessage: String?
-    @Published var coreActionState: CoreActionState = .idle
-    @Published var coreUpgradeState: CoreUpgradeState = .idle
-    @Published var uiLanguage: AppLanguage = .zhHans
-    @Published var appearanceMode: AppAppearanceMode = .system
-    @Published var isPanelPresented: Bool = false
-    @Published var isQuittingApp: Bool = false
-    @Published var activeMenuTab: RootTab = .proxy
+    @Published private var coreControlPresentationState = CoreControlPresentationState()
+    @Published private var interfacePresentationState = InterfacePresentationState()
     @Published private var launchAtLoginPresentationState = LaunchAtLoginPresentationState()
     @Published private var appReleasePresentationState = AppReleasePresentationState()
     @Published private(set) var menuBarDisplaySnapshot = MenuBarDisplay(
@@ -340,6 +334,38 @@ final class AppSession: ObservableObject {
 
     func applyPresentedLaunchAtLoginFailure(enabled: Bool, message: String) {
         self.launchAtLoginPresentationState.applyFailure(enabled: enabled, message: message)
+    }
+
+    func beginPresentedCoreAction(_ action: CoreActionState) -> Bool {
+        self.coreControlPresentationState.beginAction(action)
+    }
+
+    func endPresentedCoreAction() {
+        self.coreControlPresentationState.endAction()
+    }
+
+    func setPresentedStartupError(_ message: String?) {
+        self.coreControlPresentationState.setStartupError(message)
+    }
+
+    func beginPresentedCoreUpgrade() -> Bool {
+        self.coreControlPresentationState.beginUpgrade()
+    }
+
+    func applyPresentedCoreUpgradeState(_ state: CoreUpgradeState) {
+        self.coreControlPresentationState.applyUpgradeState(state)
+    }
+
+    func setPresentedPanelVisibility(_ presented: Bool) -> Bool {
+        self.interfacePresentationState.setPanelPresented(presented)
+    }
+
+    func setPresentedActiveMenuTab(_ tab: RootTab) -> Bool {
+        self.interfacePresentationState.setActiveMenuTab(tab)
+    }
+
+    func beginPresentedQuittingApp() -> Bool {
+        self.interfacePresentationState.beginQuitting()
     }
 
     func clearPresentedSystemProxyOpenFailureHint() {
@@ -618,6 +644,46 @@ final class AppSession: ObservableObject {
         set { self.launchAtLoginPresentationState.errorMessage = newValue }
     }
 
+    var startupErrorMessage: String? {
+        get { self.coreControlPresentationState.startupErrorMessage }
+        set { self.coreControlPresentationState.startupErrorMessage = newValue }
+    }
+
+    var coreActionState: CoreActionState {
+        get { self.coreControlPresentationState.actionState }
+        set { self.coreControlPresentationState.actionState = newValue }
+    }
+
+    var coreUpgradeState: CoreUpgradeState {
+        get { self.coreControlPresentationState.upgradeState }
+        set { self.coreControlPresentationState.upgradeState = newValue }
+    }
+
+    var uiLanguage: AppLanguage {
+        get { self.interfacePresentationState.uiLanguage }
+        set { self.interfacePresentationState.uiLanguage = newValue }
+    }
+
+    var appearanceMode: AppAppearanceMode {
+        get { self.interfacePresentationState.appearanceMode }
+        set { self.interfacePresentationState.appearanceMode = newValue }
+    }
+
+    var isPanelPresented: Bool {
+        get { self.interfacePresentationState.isPanelPresented }
+        set { self.interfacePresentationState.isPanelPresented = newValue }
+    }
+
+    var isQuittingApp: Bool {
+        get { self.interfacePresentationState.isQuittingApp }
+        set { self.interfacePresentationState.isQuittingApp = newValue }
+    }
+
+    var activeMenuTab: RootTab {
+        get { self.interfacePresentationState.activeMenuTab }
+        set { self.interfacePresentationState.activeMenuTab = newValue }
+    }
+
     var isLatestAppReleaseCheckInFlight: Bool {
         get { self.appReleasePresentationState.isCheckingLatestRelease }
         set { self.appReleasePresentationState.isCheckingLatestRelease = newValue }
@@ -674,7 +740,11 @@ final class AppSession: ObservableObject {
     }
 
     var isCoreActionProcessing: Bool {
-        self.coreActionState != .idle
+        self.coreControlPresentationState.isActionProcessing
+    }
+
+    var isPresentedCoreUpgradeInFlight: Bool {
+        self.coreControlPresentationState.isUpgradeInFlight
     }
 
     var primaryCoreActionLabel: String {

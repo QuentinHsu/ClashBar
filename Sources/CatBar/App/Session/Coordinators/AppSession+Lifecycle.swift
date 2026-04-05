@@ -35,12 +35,11 @@ extension AppSession {
 
     func startCore(trigger: StartTrigger = .manual) async {
         guard !self.isRemoteTarget else { return }
-        guard !isCoreActionProcessing else { return }
+        guard self.beginPresentedCoreAction(.starting) else { return }
         if trigger == .manual {
             shouldResumeCoreAfterNetworkRecovery = false
         }
-        coreActionState = .starting
-        defer { coreActionState = .idle }
+        defer { self.endPresentedCoreAction() }
         var settingsOverlay = currentEditableSettingsSnapshot()
         settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(settingsOverlay)
         preserveLocalSettingsOnNextSync = true
@@ -53,7 +52,7 @@ extension AppSession {
                     message: message,
                     dedupeKey: "core-start-failed")
                 if trigger == .auto {
-                    startupErrorMessage = message
+                    self.setPresentedStartupError(message)
                     statusText = "Stopped"
                     apiStatus = .unknown
                 }
@@ -66,7 +65,7 @@ extension AppSession {
                 preserveLocalSettingsOnNextSync = false
                 if trigger == .auto {
                     let fileName = URL(fileURLWithPath: configPath).lastPathComponent
-                    startupErrorMessage = tr("app.config.validation_failed.startup", fileName)
+                    self.setPresentedStartupError(tr("app.config.validation_failed.startup", fileName))
                     statusText = "Stopped"
                     apiStatus = .unknown
                 } else {
@@ -102,7 +101,7 @@ extension AppSession {
             if trigger == .auto {
                 statusText = "Stopped"
                 apiStatus = .unknown
-                startupErrorMessage = message
+                self.setPresentedStartupError(message)
             } else {
                 statusText = "Failed"
                 apiStatus = .failed
@@ -112,13 +111,12 @@ extension AppSession {
 
     func stopCore(trigger: StopTrigger = .manual) async {
         guard !self.isRemoteTarget else { return }
-        guard !isCoreActionProcessing else { return }
+        guard self.beginPresentedCoreAction(.stopping) else { return }
         if trigger == .manual {
             shouldResumeCoreAfterNetworkRecovery = false
         }
         let recoverySnapshotBeforeStop = self.currentCoreFeatureRecoverySnapshot()
-        coreActionState = .stopping
-        defer { coreActionState = .idle }
+        defer { self.endPresentedCoreAction() }
         await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
             fallbackRecovery: recoverySnapshotBeforeStop,
             transitionKind: .stop)
@@ -133,9 +131,8 @@ extension AppSession {
 
     func restartCore(trigger: ProviderRefreshTrigger = .restart) async {
         guard !self.isRemoteTarget else { return }
-        guard !isCoreActionProcessing else { return }
-        coreActionState = .restarting
-        defer { coreActionState = .idle }
+        guard self.beginPresentedCoreAction(.restarting) else { return }
+        defer { self.endPresentedCoreAction() }
         preserveLocalSettingsOnNextSync = true
         cancelProviderRefresh(reason: "restart requested")
         do {
@@ -210,8 +207,7 @@ extension AppSession {
     /// (which prevents SwiftUI rendering) by doing all heavy work **before**
     /// calling terminate.
     func quitApp() async {
-        guard !self.isQuittingApp else { return }
-        self.isQuittingApp = true
+        guard self.beginPresentedQuittingApp() else { return }
 
         // Yield so SwiftUI commits the loading-indicator frame before we begin
         // any blocking-capable work.  100 ms ≈ 6 display-refresh cycles at 60 Hz.
@@ -394,7 +390,7 @@ extension AppSession {
             refreshStatusAfterBootstrap: options.refreshSystemProxyAfterBootstrap)
 
         defaults.set(configPath, forKey: lastSuccessfulConfigPathKey)
-        startupErrorMessage = nil
+        self.setPresentedStartupError(nil)
         await self.restoreCoreFeaturesAfterStartupIfNeeded()
         enforceNetworkManagedCorePolicyIfNeeded()
 

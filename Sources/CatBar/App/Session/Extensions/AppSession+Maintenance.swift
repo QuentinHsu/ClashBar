@@ -23,11 +23,10 @@ extension AppSession {
     }
 
     func upgradeCore() async {
-        guard !self.isCoreUpgradeInFlight else { return }
+        guard self.beginPresentedCoreUpgrade() else { return }
 
         self.coreUpgradeFeedbackClearTask?.cancel()
         self.coreUpgradeFeedbackClearTask = nil
-        self.coreUpgradeState = .running
 
         do {
             let response = try await self.upgradeCoreUseCase().execute()
@@ -54,14 +53,11 @@ extension AppSession {
     }
 
     var isCoreUpgradeInFlight: Bool {
-        if case .running = self.coreUpgradeState {
-            return true
-        }
-        return false
+        self.isPresentedCoreUpgradeInFlight
     }
 
     private func applyCoreUpgradeState(_ state: CoreUpgradeState) {
-        self.coreUpgradeState = state
+        self.applyPresentedCoreUpgradeState(state)
 
         switch state {
         case .idle, .running:
@@ -96,7 +92,7 @@ extension AppSession {
 
             guard let self else { return }
             guard !self.isCoreUpgradeInFlight else { return }
-            self.coreUpgradeState = .idle
+            self.applyPresentedCoreUpgradeState(.idle)
         }
     }
 

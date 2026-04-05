@@ -80,8 +80,7 @@ extension AppSession {
     }
 
     func setPanelVisibility(_ presented: Bool) {
-        guard isPanelPresented != presented else { return }
-        isPanelPresented = presented
+        guard self.setPresentedPanelVisibility(presented) else { return }
         if !presented {
             cancelProxyPortsAutoSave()
             self.clearTrafficPresentationHistory()
@@ -96,8 +95,7 @@ extension AppSession {
     }
 
     func setActiveMenuTab(_ tab: RootTab) {
-        let changed = activeMenuTab != tab
-        activeMenuTab = tab
+        let changed = self.setPresentedActiveMenuTab(tab)
         self.updateDataAcquisitionPolicy()
 
         guard changed else { return }
