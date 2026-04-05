@@ -23,6 +23,19 @@ extension MenuBarRootView {
 
     private static var textWidthCache: [String: CGFloat] = [:]
 
+    private var connectionRulePresentationResolver: ConnectionRulePresentationResolver {
+        ConnectionRulePresentationResolver()
+    }
+
+    private var connectionsTopLineLayoutResolver: ConnectionsTopLineLayoutResolver {
+        ConnectionsTopLineLayoutResolver(
+            topLineSpacing: ConnectionsLayout.topLineSpacing,
+            topMetaSpacing: ConnectionsLayout.topMetaSpacing,
+            minimumHostWidthRatio: 0.5,
+            minimumRuleWidth: ConnectionsLayout.topRuleMinWidth,
+            minimumPayloadWidth: ConnectionsLayout.topPayloadMinWidth)
+    }
+
     @ViewBuilder
     var connectionsTabBody: some View {
         let connections = self.connectionsViewModel.visibleConnections
@@ -123,7 +136,7 @@ extension MenuBarRootView {
         self.connectionsViewModel.updateVisibleConnections(
             from: self.connectionsStore.connections,
             searchText: { connection in
-                self.connectionSearchText(for: connection)
+                self.connectionRulePresentationResolver.searchText(for: connection)
             })
     }
 
@@ -137,8 +150,10 @@ extension MenuBarRootView {
         let timeText = self.connectionTimeOnly(conn.start)
         let upText = ValueFormatter.bytesCompactNoSpace(conn.upload ?? 0)
         let downText = ValueFormatter.bytesCompactNoSpace(conn.download ?? 0)
-        let parsedRule = self.parseConnectionRule(conn.rule)
-        let ruleTypeText = self.connectionRuleTypeText(conn.rule, fallback: parsedRule?.type)
+        let parsedRule = self.connectionRulePresentationResolver.parseRule(conn.rule)
+        let ruleTypeText = self.connectionRulePresentationResolver.ruleTypeText(
+            raw: conn.rule,
+            fallback: parsedRule?.type)
         let rulePayloadText = conn.rulePayload.trimmedNonEmpty
             ?? parsedRule?.payload.trimmedNonEmpty
             ?? "--"
@@ -155,7 +170,7 @@ extension MenuBarRootView {
             VStack(alignment: .leading, spacing: MenuBarLayoutTokens.space2) {
                 self.connectionRowTopLine(host: hostText, ruleType: ruleTypeText, rulePayload: rulePayloadText)
                 self.connectionRowMetrics(time: timeText, network: networkType, up: upText, down: downText)
-                self.connectionsChainsLine(parts: self.connectionChainsParts(conn.chains))
+                self.connectionsChainsLine(parts: self.connectionRulePresentationResolver.chainsParts(conn.chains))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -171,10 +186,20 @@ extension MenuBarRootView {
 
     private func connectionRowTopLine(host: String, ruleType: String, rulePayload: String) -> some View {
         // Use static rowContentWidth constant — no GeometryReader needed since panel is always 360pt
-        let layout = self.connectionsTopLineLayout(
+        let layout = self.connectionsTopLineLayoutResolver.resolve(
             totalWidth: ConnectionsLayout.rowContentWidth,
-            ruleText: ruleType,
-            payloadText: rulePayload)
+            desiredRuleWidth: max(
+                ConnectionsLayout.topRuleMinWidth,
+                self.connectionsMonospacedTextWidth(
+                    ruleType,
+                    size: MenuBarLayoutTokens.FontSize.caption,
+                    weight: .semibold) + 4),
+            desiredPayloadWidth: max(
+                ConnectionsLayout.topPayloadMinWidth,
+                self.connectionsMonospacedTextWidth(
+                    rulePayload,
+                    size: MenuBarLayoutTokens.FontSize.caption,
+                    weight: .medium)))
 
         return HStack(spacing: ConnectionsLayout.topLineSpacing) {
             Text(host)
@@ -344,66 +369,6 @@ extension MenuBarRootView {
             .frame(height: ConnectionsLayout.rowLineHeight, alignment: .leading)
     }
 
-    func connectionsTopLineLayout(
-        totalWidth: CGFloat,
-        ruleText: String,
-        payloadText: String) -> (hostWidth: CGFloat, ruleWidth: CGFloat, payloadWidth: CGFloat)
-    {
-        guard totalWidth > 0 else { return (0, 0, 0) }
-
-        let hostMinWidth = floor(totalWidth * 0.5)
-        let metaMaxWidth = max(totalWidth - ConnectionsLayout.topLineSpacing - hostMinWidth, 0)
-
-        var ruleWidth = max(
-            ConnectionsLayout.topRuleMinWidth,
-            self
-                .connectionsMonospacedTextWidth(
-                    ruleText,
-                    size: MenuBarLayoutTokens.FontSize.caption,
-                    weight: .semibold) +
-                4)
-        var payloadWidth = max(
-            ConnectionsLayout.topPayloadMinWidth,
-            self.connectionsMonospacedTextWidth(
-                payloadText,
-                size: MenuBarLayoutTokens.FontSize.caption,
-                weight: .medium))
-        let desiredMetaWidth = ruleWidth + ConnectionsLayout.topMetaSpacing + payloadWidth
-
-        if desiredMetaWidth > metaMaxWidth {
-            var overflow = desiredMetaWidth - metaMaxWidth
-
-            let payloadReducible = max(payloadWidth - ConnectionsLayout.topPayloadMinWidth, 0)
-            let payloadReduction = min(overflow, payloadReducible)
-            payloadWidth -= payloadReduction
-            overflow -= payloadReduction
-
-            if overflow > 0 {
-                let ruleReducible = max(ruleWidth - ConnectionsLayout.topRuleMinWidth, 0)
-                let ruleReduction = min(overflow, ruleReducible)
-                ruleWidth -= ruleReduction
-                overflow -= ruleReduction
-            }
-
-            if overflow > 0 {
-                let metaContentWidth = max(metaMaxWidth - ConnectionsLayout.topMetaSpacing, 0)
-                if metaContentWidth <= 0 {
-                    ruleWidth = 0
-                    payloadWidth = 0
-                } else {
-                    let total = max(ruleWidth + payloadWidth, 1)
-                    let ruleRatio = ruleWidth / total
-                    ruleWidth = floor(metaContentWidth * ruleRatio)
-                    payloadWidth = max(metaContentWidth - ruleWidth, 0)
-                }
-            }
-        }
-
-        let metaWidth = ruleWidth + ConnectionsLayout.topMetaSpacing + payloadWidth
-        let hostWidth = max(totalWidth - ConnectionsLayout.topLineSpacing - metaWidth, hostMinWidth)
-        return (hostWidth, ruleWidth, payloadWidth)
-    }
-
     func connectionsMonospacedTextWidth(_ text: String, size: CGFloat, weight: NSFont.Weight) -> CGFloat {
         let cacheKey = "\(text)\0\(size)\0\(weight.rawValue)"
         if let cached = Self.textWidthCache[cacheKey] {
@@ -415,44 +380,6 @@ extension MenuBarRootView {
         let width = ceil((text as NSString).size(withAttributes: attributes).width)
         Self.textWidthCache[cacheKey] = width
         return width
-    }
-
-    func connectionRuleTypeText(_ raw: String?, fallback: String?) -> String {
-        let candidate = fallback.trimmedNonEmpty ?? raw.trimmedNonEmpty ?? ""
-        guard !candidate.isEmpty else { return "--" }
-
-        let normalized = candidate.uppercased()
-        if normalized == "MATCH" || normalized == "FINAL" { return "--" }
-        return candidate
-    }
-
-    func connectionChainsParts(_ chains: [String]?) -> [String] {
-        Array((chains ?? []).compactMap(\.trimmedNonEmpty).reversed())
-    }
-
-    func parseConnectionRule(_ raw: String?) -> (type: String, payload: String?)? {
-        guard let raw = raw.trimmedNonEmpty else {
-            return nil
-        }
-
-        if let open = raw.firstIndex(of: "("), let close = raw.lastIndex(of: ")"), open < close {
-            let type = raw[..<open].trimmed
-            let payload = raw[raw.index(after: open)..<close].trimmed
-            if let type = type.nonEmpty {
-                return (type, payload.nonEmpty)
-            }
-        }
-
-        let commaParts = raw.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
-        if commaParts.count == 2 {
-            let type = commaParts[0].trimmed
-            let payload = commaParts[1].trimmed
-            if let type = type.nonEmpty {
-                return (type, payload.nonEmpty)
-            }
-        }
-
-        return (raw, nil)
     }
 
     func connectionTimeOnly(_ input: String?) -> String {
@@ -487,18 +414,5 @@ extension MenuBarRootView {
             return ("network", nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid))
         }
         return ("globe", nativeSecondaryLabel)
-    }
-
-    func connectionSearchText(for conn: ConnectionSummary) -> String {
-        let host = conn.metadata?.host ?? ""
-        let destinationIP = conn.metadata?.destinationIP ?? ""
-        let sourceIP = conn.metadata?.sourceIP ?? ""
-        let network = conn.metadata?.network ?? ""
-        let id = conn.id
-        let rule = conn.rule ?? ""
-        let rulePayload = conn.rulePayload ?? ""
-        let chains = self.connectionChainsParts(conn.chains).joined(separator: " > ")
-        let start = conn.start ?? ""
-        return "\(host) \(destinationIP) \(sourceIP) \(network) \(id) \(rule) \(rulePayload) \(chains) \(start)"
     }
 }
