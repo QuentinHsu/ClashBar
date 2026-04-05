@@ -2,6 +2,10 @@ import Foundation
 
 @MainActor
 extension AppSession {
+    private var buildEditableSettingsOverlayPatchBodyUseCase: BuildEditableSettingsOverlayPatchBodyUseCase {
+        BuildEditableSettingsOverlayPatchBodyUseCase()
+    }
+
     private var buildPortPatchBodyUseCase: BuildPortPatchBodyUseCase {
         BuildPortPatchBodyUseCase()
     }
@@ -219,39 +223,27 @@ extension AppSession {
         successMessage: String,
         syncSystemProxyPort: Bool = true) async -> Bool
     {
-        let fallback = lastSyncedEditableSettings
-        let resolvedLogLevel = overlay.logLevel.trimmed.isEmpty
-            ? (fallback?.logLevel ?? ConfigLogLevel.info.rawValue)
-            : overlay.logLevel
+        let fallback = self.lastSyncedEditableSettings
+        let hasConfiguredTunStack = overlay.tunEnabled ? await self.selectedConfigDeclaresTunStack() : true
 
-        guard ConfigLogLevel(rawValue: resolvedLogLevel) != nil else {
+        let body: [String: ConfigPatchValue]
+        do {
+            body = try self.buildEditableSettingsOverlayPatchBodyUseCase.execute(
+                overlay: overlay,
+                fallback: fallback,
+                hasConfiguredTunStack: hasConfiguredTunStack)
+        } catch let BuildEditableSettingsOverlayPatchBodyError.invalidLogLevel(resolvedLogLevel) {
             settingsErrorMessage = tr("app.settings.error.overlay_invalid_log_level", resolvedLogLevel)
             settingsSavedMessage = nil
             return false
-        }
-
-        let resolvedPortFields = self.resolveOverlayPortFieldsUseCase.execute(
-            overlay: overlay,
-            fallback: fallback)
-        guard let portBody = validatedPortPatchBody(
-            fields: resolvedPortFields,
-            errorMessageKey: "app.settings.error.overlay_port_range",
-            skipEmptyValues: true)
-        else { return false }
-
-        var body: [String: ConfigPatchValue] = [
-            "allow-lan": .bool(overlay.allowLan),
-            "ipv6": .bool(overlay.ipv6),
-            "tcp-concurrent": .bool(overlay.tcpConcurrent),
-            "log-level": .string(resolvedLogLevel),
-        ]
-        let tunBody = await self.tunOverlayPatchBody(enabled: overlay.tunEnabled)
-        body["tun"] = .object(tunBody)
-        if overlay.tunEnabled {
-            body["dns"] = .object(["enable": .bool(true)])
-        }
-        for (key, value) in portBody {
-            body[key] = value
+        } catch let BuildEditableSettingsOverlayPatchBodyError.invalidPort(key) {
+            settingsErrorMessage = tr("app.settings.error.overlay_port_range", key)
+            settingsSavedMessage = nil
+            return false
+        } catch {
+            settingsErrorMessage = tr("app.settings.error.overlay_port_range", "unknown")
+            settingsSavedMessage = nil
+            return false
         }
 
         return await self.patchConfigBody(
@@ -479,17 +471,6 @@ extension AppSession {
             SettingsPortField(key: "redir-port", value: settingsRedirPort),
             SettingsPortField(key: "tproxy-port", value: settingsTProxyPort),
         ]
-    }
-
-    private func tunOverlayPatchBody(enabled: Bool) async -> [String: ConfigPatchValue] {
-        var tunBody: [String: ConfigPatchValue] = ["enable": .bool(enabled)]
-        if enabled {
-            let hasConfiguredStack = await self.selectedConfigDeclaresTunStack()
-            if !hasConfiguredStack {
-                tunBody["stack"] = .string("mixed")
-            }
-        }
-        return tunBody
     }
 
     private func validatedPortPatchBody(
