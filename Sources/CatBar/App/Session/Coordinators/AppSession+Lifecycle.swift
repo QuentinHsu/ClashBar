@@ -416,20 +416,10 @@ extension AppSession {
     }
 
     private func currentCoreFeatureRecoverySnapshot() -> CoreFeatureRecoveryState {
-        self.mergeCoreFeatureRecoveryStates(
-            CoreFeatureRecoveryState(
-                systemProxyEnabled: self.isSystemProxyEnabled,
-                tunEnabled: self.isTunEnabled),
-            self.pendingCoreFeatureRecoveryState)
-    }
-
-    private func mergeCoreFeatureRecoveryStates(
-        _ first: CoreFeatureRecoveryState?,
-        _ second: CoreFeatureRecoveryState?) -> CoreFeatureRecoveryState
-    {
         CoreFeatureRecoveryState(
-            systemProxyEnabled: (first?.systemProxyEnabled ?? false) || (second?.systemProxyEnabled ?? false),
-            tunEnabled: (first?.tunEnabled ?? false) || (second?.tunEnabled ?? false))
+            systemProxyEnabled: self.isSystemProxyEnabled,
+            tunEnabled: self.isTunEnabled)
+            .merged(with: self.pendingCoreFeatureRecoveryState)
     }
 
     private func prepareCoreFeatureRecoveryBeforeCoreTransition(
@@ -448,8 +438,8 @@ extension AppSession {
             fallbackRecovery
         }
 
-        let recovery = self.mergeCoreFeatureRecoveryStates(baseRecovery, self.pendingCoreFeatureRecoveryState)
-        self.pendingCoreFeatureRecoveryState = recovery.shouldRecoverAnyFeature ? recovery : nil
+        let recovery = baseRecovery.merged(with: self.pendingCoreFeatureRecoveryState)
+        self.pendingCoreFeatureRecoveryState = recovery.pendingState
 
         if runtimeRunningBeforeTransition, recovery.tunEnabled {
             self.isTunEnabled = false
@@ -562,6 +552,6 @@ extension AppSession {
         let remaining = CoreFeatureRecoveryState(
             systemProxyEnabled: remainingSystemProxyRecovery,
             tunEnabled: remainingTunRecovery)
-        self.pendingCoreFeatureRecoveryState = remaining.shouldRecoverAnyFeature ? remaining : nil
+        self.pendingCoreFeatureRecoveryState = remaining.pendingState
     }
 }

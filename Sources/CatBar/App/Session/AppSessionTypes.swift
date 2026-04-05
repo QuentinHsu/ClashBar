@@ -595,6 +595,16 @@ struct CoreFeatureRecoveryState {
     var shouldRecoverAnyFeature: Bool {
         self.systemProxyEnabled || self.tunEnabled
     }
+
+    var pendingState: CoreFeatureRecoveryState? {
+        self.shouldRecoverAnyFeature ? self : nil
+    }
+
+    func merged(with other: CoreFeatureRecoveryState?) -> CoreFeatureRecoveryState {
+        CoreFeatureRecoveryState(
+            systemProxyEnabled: self.systemProxyEnabled || (other?.systemProxyEnabled ?? false),
+            tunEnabled: self.tunEnabled || (other?.tunEnabled ?? false))
+    }
 }
 
 struct EditableSettingsSnapshot: Equatable, Codable {
