@@ -147,11 +147,11 @@ extension AppSession {
         guard isRuntimeRunning else { return }
         guard self.hasSystemProxyOpenIntent else {
             self.resetSystemProxyObservedState()
-            didCheckSystemProxyConsistencyOnLaunch = true
+            self.markLifecycleSystemProxyConsistencyCheckedOnLaunch()
             return
         }
         guard isSystemProxyEnabled else {
-            didCheckSystemProxyConsistencyOnLaunch = true
+            self.markLifecycleSystemProxyConsistencyCheckedOnLaunch()
             return
         }
 
@@ -169,7 +169,7 @@ extension AppSession {
             self.systemProxyHelperFailureMessage = nil
             systemProxyActiveDisplay = buildSystemProxyDisplayString(host: target.host, ports: target.ports)
 
-            didCheckSystemProxyConsistencyOnLaunch = true
+            self.markLifecycleSystemProxyConsistencyCheckedOnLaunch()
             await refreshSystemProxyStatus()
         } catch {
             appendLog(

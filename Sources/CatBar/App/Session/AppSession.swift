@@ -31,6 +31,7 @@ final class AppSession: ObservableObject {
     @Published private var interfacePresentationState = InterfacePresentationState()
     @Published private var launchAtLoginPresentationState = LaunchAtLoginPresentationState()
     @Published private var appReleasePresentationState = AppReleasePresentationState()
+    private var lifecycleCoordinationState = LifecycleCoordinationState()
     @Published private(set) var menuBarDisplaySnapshot = MenuBarDisplay(
         mode: .iconOnly,
         symbolName: "bolt.slash.circle",
@@ -308,6 +309,14 @@ final class AppSession: ObservableObject {
 
     func applyPresentedCoreUpgradeState(_ state: CoreUpgradeState) {
         self.coreControlPresentationState.applyUpgradeState(state)
+    }
+
+    func beginLifecycleAutoStartAttempt() -> Bool {
+        self.lifecycleCoordinationState.beginAutoStartAttempt()
+    }
+
+    func markLifecycleSystemProxyConsistencyCheckedOnLaunch() {
+        self.lifecycleCoordinationState.markSystemProxyConsistencyCheckedOnLaunch()
     }
 
     func setPresentedPanelVisibility(_ presented: Bool) -> Bool {
@@ -767,6 +776,16 @@ final class AppSession: ObservableObject {
         set { self.appReleasePresentationState.isCheckingLatestRelease = newValue }
     }
 
+    var didAttemptAutoStart: Bool {
+        get { self.lifecycleCoordinationState.didAttemptAutoStart }
+        set { self.lifecycleCoordinationState.didAttemptAutoStart = newValue }
+    }
+
+    var didCheckSystemProxyConsistencyOnLaunch: Bool {
+        get { self.lifecycleCoordinationState.didCheckSystemProxyConsistencyOnLaunch }
+        set { self.lifecycleCoordinationState.didCheckSystemProxyConsistencyOnLaunch = newValue }
+    }
+
     var lastSyncedEditableSettings: EditableSettingsSnapshot? {
         get { self.settingsPresentationState.lastSyncedEditableSettings }
         set { self.settingsPresentationState.lastSyncedEditableSettings = newValue }
@@ -918,15 +937,25 @@ final class AppSession: ObservableObject {
     var mihomoLogFileURL: URL?
     var catbarLogStore: AppLogStore?
     var mihomoLogStore: AppLogStore?
-    var didAttemptAutoStart = false
-    var didCheckSystemProxyConsistencyOnLaunch = false
     var lastCoreFailureAlertKey: String?
     var lastCoreFailureAlertAt: Date?
     let coreFailureAlertThrottleInterval: TimeInterval = 20
-    var networkReachabilityStatus: NetworkReachabilityStatus = .unknown
-    var shouldResumeCoreAfterNetworkRecovery = false
-    var isNetworkReachabilityMonitoring = false
-    var pendingCoreFeatureRecoveryState: CoreFeatureRecoveryState?
+    var networkReachabilityStatus: NetworkReachabilityStatus {
+        get { self.lifecycleCoordinationState.networkReachabilityStatus }
+        set { self.lifecycleCoordinationState.networkReachabilityStatus = newValue }
+    }
+    var shouldResumeCoreAfterNetworkRecovery: Bool {
+        get { self.lifecycleCoordinationState.shouldResumeCoreAfterNetworkRecovery }
+        set { self.lifecycleCoordinationState.shouldResumeCoreAfterNetworkRecovery = newValue }
+    }
+    var isNetworkReachabilityMonitoring: Bool {
+        get { self.lifecycleCoordinationState.isNetworkReachabilityMonitoring }
+        set { self.lifecycleCoordinationState.isNetworkReachabilityMonitoring = newValue }
+    }
+    var pendingCoreFeatureRecoveryState: CoreFeatureRecoveryState? {
+        get { self.lifecycleCoordinationState.pendingCoreFeatureRecoveryState }
+        set { self.lifecycleCoordinationState.pendingCoreFeatureRecoveryState = newValue }
+    }
     var deferredEditableSettingsOverlay: (snapshot: EditableSettingsSnapshot, syncingKey: String)?
     var remoteConfigSources: [String: String] = [:]
     var externalControllerWarningKeys: Set<String> = []

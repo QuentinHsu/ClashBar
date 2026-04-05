@@ -630,6 +630,48 @@ struct CoreControlPresentationState {
     }
 }
 
+struct LifecycleCoordinationState {
+    var didAttemptAutoStart = false
+    var didCheckSystemProxyConsistencyOnLaunch = false
+    var networkReachabilityStatus: NetworkReachabilityStatus = .unknown
+    var shouldResumeCoreAfterNetworkRecovery = false
+    var isNetworkReachabilityMonitoring = false
+    var pendingCoreFeatureRecoveryState: CoreFeatureRecoveryState?
+
+    mutating func beginAutoStartAttempt() -> Bool {
+        guard !self.didAttemptAutoStart else { return false }
+        self.didAttemptAutoStart = true
+        return true
+    }
+
+    mutating func markSystemProxyConsistencyCheckedOnLaunch() {
+        self.didCheckSystemProxyConsistencyOnLaunch = true
+    }
+
+    mutating func beginNetworkReachabilityMonitoring() -> Bool {
+        guard !self.isNetworkReachabilityMonitoring else { return false }
+        self.isNetworkReachabilityMonitoring = true
+        return true
+    }
+
+    mutating func endNetworkReachabilityMonitoring(resetState: Bool) {
+        self.isNetworkReachabilityMonitoring = false
+        if resetState {
+            self.networkReachabilityStatus = .unknown
+            self.shouldResumeCoreAfterNetworkRecovery = false
+        }
+    }
+
+    mutating func updateNetworkReachabilityStatus(
+        _ status: NetworkReachabilityStatus)
+        -> NetworkReachabilityStatus
+    {
+        let previous = self.networkReachabilityStatus
+        self.networkReachabilityStatus = status
+        return previous
+    }
+}
+
 struct InterfacePresentationState {
     var uiLanguage: AppLanguage = .zhHans
     var appearanceMode: AppAppearanceMode = .system

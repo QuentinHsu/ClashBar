@@ -405,8 +405,7 @@ extension AppSession {
     }
 
     func attemptAutoStartIfNeeded() async {
-        if didAttemptAutoStart { return }
-        didAttemptAutoStart = true
+        guard self.beginLifecycleAutoStartAttempt() else { return }
         await self.startCore(trigger: .auto)
     }
 
