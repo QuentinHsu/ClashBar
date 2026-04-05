@@ -3,6 +3,10 @@ import Foundation
 
 @MainActor
 extension AppSession {
+    private var startCoreFailureResolver: StartCoreFailureResolver {
+        StartCoreFailureResolver()
+    }
+
     private var validateCoreConfigUseCase: ValidateCoreConfigUseCase {
         ValidateCoreConfigUseCase(coreRepository: self.coreRepository)
     }
@@ -39,6 +43,53 @@ extension AppSession {
         await operation()
     }
 
+    private func applyStartCoreFailureResolution(_ resolution: StartCoreFailureResolution) {
+        if let statusText = resolution.statusText {
+            self.statusText = statusText
+        }
+        if let apiStatus = resolution.apiStatus {
+            self.apiStatus = apiStatus
+        }
+        self.setPresentedStartupError(resolution.startupErrorMessage)
+    }
+
+    private func handleMissingStartCoreConfig(trigger: StartTrigger) {
+        let message = tr("log.start.no_config")
+        appendLog(level: "error", message: message)
+        self.presentCoreFailureAlert(
+            title: self.tr("app.core.alert.start_failed.title"),
+            message: message,
+            dedupeKey: "core-start-failed")
+        self.applyStartCoreFailureResolution(
+            self.startCoreFailureResolver.resolve(
+                trigger: trigger,
+                kind: .missingConfig(message: message)))
+    }
+
+    private func handleStartCoreValidationFailure(configPath: String, trigger: StartTrigger) {
+        preserveLocalSettingsOnNextSync = false
+        let startupMessage = tr("app.config.validation_failed.startup", URL(fileURLWithPath: configPath).lastPathComponent)
+        self.applyStartCoreFailureResolution(
+            self.startCoreFailureResolver.resolve(
+                trigger: trigger,
+                kind: .validationFailed(startupMessage: startupMessage)))
+    }
+
+    private func handleStartCoreExecutionFailure(_ error: Error, trigger: StartTrigger) {
+        let errorMessage = self.coreErrorMessage(error)
+        preserveLocalSettingsOnNextSync = false
+        let message = tr("log.start.failed", errorMessage)
+        appendLog(level: "error", message: message)
+        self.presentCoreFailureAlert(
+            title: self.tr("app.core.alert.start_failed.title"),
+            message: message,
+            dedupeKey: "core-start-failed")
+        self.applyStartCoreFailureResolution(
+            self.startCoreFailureResolver.resolve(
+                trigger: trigger,
+                kind: .executionFailed(message: message)))
+    }
+
     func startCore(trigger: StartTrigger = .manual) async {
         guard !self.isRemoteTarget else { return }
         await self.performExclusiveCoreAction(.starting) {
@@ -50,33 +101,14 @@ extension AppSession {
             preserveLocalSettingsOnNextSync = true
             do {
                 guard let configPath = await resolveSelectedConfigPath() else {
-                    let message = tr("log.start.no_config")
-                    appendLog(level: "error", message: message)
-                    self.presentCoreFailureAlert(
-                        title: self.tr("app.core.alert.start_failed.title"),
-                        message: message,
-                        dedupeKey: "core-start-failed")
-                    if trigger == .auto {
-                        self.setPresentedStartupError(message)
-                        statusText = "Stopped"
-                        apiStatus = .unknown
-                    }
+                    self.handleMissingStartCoreConfig(trigger: trigger)
                     return
                 }
 
                 settingsOverlay = try await prepareTunOverlayForCoreStartup(settingsOverlay)
 
                 guard await self.validateConfigBeforeCoreLaunch(configPath: configPath) else {
-                    preserveLocalSettingsOnNextSync = false
-                    if trigger == .auto {
-                        let fileName = URL(fileURLWithPath: configPath).lastPathComponent
-                        self.setPresentedStartupError(tr("app.config.validation_failed.startup", fileName))
-                        statusText = "Stopped"
-                        apiStatus = .unknown
-                    } else {
-                        statusText = "Failed"
-                        apiStatus = .failed
-                    }
+                    self.handleStartCoreValidationFailure(configPath: configPath, trigger: trigger)
                     return
                 }
 
@@ -95,22 +127,7 @@ extension AppSession {
                         refreshSystemProxyAfterBootstrap: false,
                         autoTestGroupLatencies: true))
             } catch {
-                let errorMessage = self.coreErrorMessage(error)
-                preserveLocalSettingsOnNextSync = false
-                let message = tr("log.start.failed", errorMessage)
-                appendLog(level: "error", message: message)
-                self.presentCoreFailureAlert(
-                    title: self.tr("app.core.alert.start_failed.title"),
-                    message: message,
-                    dedupeKey: "core-start-failed")
-                if trigger == .auto {
-                    statusText = "Stopped"
-                    apiStatus = .unknown
-                    self.setPresentedStartupError(message)
-                } else {
-                    statusText = "Failed"
-                    apiStatus = .failed
-                }
+                self.handleStartCoreExecutionFailure(error, trigger: trigger)
             }
         }
     }
