@@ -16,6 +16,9 @@ Menu bar control panel for `mihomo` on macOS, bringing together proxies, rules, 
   <a href="https://github.com/QuentinHsu/cat-bar/releases" target="_blank" rel="noopener noreferrer">
     <img alt="Version" src="https://img.shields.io/github/v/release/QuentinHsu/cat-bar?style=flat&logo=github" />
   </a>
+  <a href="https://github.com/QuentinHsu/cat-bar/releases">
+    <img src="https://img.shields.io/github/downloads/QuentinHsu/cat-bar/total?style=flat-square&logo=dropbox&logoColor=white&color=green" alt="Downloads">
+  </a>
 </p>
 
 <p>
