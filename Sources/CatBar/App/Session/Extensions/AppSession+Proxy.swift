@@ -352,9 +352,7 @@ extension AppSession {
     }
 
     func rebuildProxyGroupIndex() {
-        self.proxyGroupIndex = Dictionary(
-            self.proxyGroups.map { ($0.name, $0) },
-            uniquingKeysWith: { _, latest in latest })
+        self.rebuildPresentedProxyGroupIndex()
     }
 
     func isLatencyTesting(group: ProxyGroup, nodeName: String) -> Bool {
@@ -447,10 +445,10 @@ extension AppSession {
     }
 
     private func proxyGroup(named name: String) -> ProxyGroup? {
-        if self.proxyGroupIndex.isEmpty, !self.proxyGroups.isEmpty {
+        if self.presentedProxyGroup(named: name) == nil, !self.proxyGroups.isEmpty {
             self.rebuildProxyGroupIndex()
         }
-        return self.proxyGroupIndex[name]
+        return self.presentedProxyGroup(named: name)
     }
 
     private func refreshResolvedGroupLatencies(startingFrom rootGroups: [ProxyGroup]) async {

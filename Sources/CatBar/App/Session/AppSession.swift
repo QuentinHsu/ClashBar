@@ -45,20 +45,15 @@ final class AppSession: ObservableObject {
     @Published var mixedPort: Int = 7890
 
     @Published private var configPresentationState = ConfigPresentationState()
-
-    @Published var proxyGroups: [ProxyGroup] = []
+    @Published private var proxyGroupPresentationState = ProxyGroupPresentationState()
     @Published var groupLatencyLoading: Set<String> = []
     @Published var nodeLatencyLoading: Set<String> = []
     @Published var groupLatencyPendingDelayKeys: [String: Set<String>] = [:]
     var groupLoadingRefCount = RefCountedPresence<String>()
     var pendingDelayKeyRefCount = NestedRefCountedPresence<String, String>()
     var nodeLoadingRefCount = RefCountedPresence<String>()
-    var proxyGroupIndex: [String: ProxyGroup] = [:]
     @Published var groupLatencies: [String: [String: Int]] = [:]
     @Published var liveProxyLatestDelay: [String: Int] = [:]
-    @Published var proxyHistoryLatestDelay: [String: Int] = [:]
-    @Published var proxyNodeTypes: [String: String] = [:]
-    @Published var proxyNodeIDs: [String: String] = [:]
     @Published private var providerPresentationState = ProviderPresentationState()
 
     @Published var isSystemProxyEnabled: Bool = false
@@ -246,6 +241,22 @@ final class AppSession: ObservableObject {
         self.logPresentationState.prepend(entries, limit: limit)
     }
 
+    func rebuildPresentedProxyGroupIndex() {
+        self.proxyGroupPresentationState.rebuildGroupIndex()
+    }
+
+    func clearPresentedProxyGroupIndex(keepingCapacity: Bool = false) {
+        self.proxyGroupPresentationState.clearResolvedGroupIndex(keepingCapacity: keepingCapacity)
+    }
+
+    func clearPresentedProxyGroups(keepingCapacity: Bool = false) {
+        self.proxyGroupPresentationState.clear(keepingCapacity: keepingCapacity)
+    }
+
+    func presentedProxyGroup(named name: String) -> ProxyGroup? {
+        self.proxyGroupPresentationState.proxyGroupIndex[name]
+    }
+
     var isRemoteTarget: Bool {
         !self.remoteMachineStore.activeTarget.isLocal
     }
@@ -277,6 +288,26 @@ final class AppSession: ObservableObject {
     var remoteConfigMenuStates: [String: RemoteConfigMenuState] {
         get { self.configPresentationState.remoteConfigMenuStates }
         set { self.configPresentationState.remoteConfigMenuStates = newValue }
+    }
+
+    var proxyGroups: [ProxyGroup] {
+        get { self.proxyGroupPresentationState.proxyGroups }
+        set { self.proxyGroupPresentationState.proxyGroups = newValue }
+    }
+
+    var proxyHistoryLatestDelay: [String: Int] {
+        get { self.proxyGroupPresentationState.proxyHistoryLatestDelay }
+        set { self.proxyGroupPresentationState.proxyHistoryLatestDelay = newValue }
+    }
+
+    var proxyNodeTypes: [String: String] {
+        get { self.proxyGroupPresentationState.proxyNodeTypes }
+        set { self.proxyGroupPresentationState.proxyNodeTypes = newValue }
+    }
+
+    var proxyNodeIDs: [String: String] {
+        get { self.proxyGroupPresentationState.proxyNodeIDs }
+        set { self.proxyGroupPresentationState.proxyNodeIDs = newValue }
     }
 
     var errorLogs: [AppErrorLogEntry] {

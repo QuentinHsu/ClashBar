@@ -190,6 +190,32 @@ struct LogPresentationState {
     }
 }
 
+struct ProxyGroupPresentationState {
+    var proxyGroups: [ProxyGroup] = []
+    var proxyGroupIndex: [String: ProxyGroup] = [:]
+    var proxyHistoryLatestDelay: [String: Int] = [:]
+    var proxyNodeTypes: [String: String] = [:]
+    var proxyNodeIDs: [String: String] = [:]
+
+    mutating func rebuildGroupIndex() {
+        self.proxyGroupIndex = Dictionary(
+            self.proxyGroups.map { ($0.name, $0) },
+            uniquingKeysWith: { _, latest in latest })
+    }
+
+    mutating func clearResolvedGroupIndex(keepingCapacity: Bool) {
+        self.proxyGroupIndex.removeAll(keepingCapacity: keepingCapacity)
+    }
+
+    mutating func clear(keepingCapacity: Bool) {
+        self.proxyGroups.removeAll(keepingCapacity: keepingCapacity)
+        self.proxyGroupIndex.removeAll(keepingCapacity: keepingCapacity)
+        self.proxyHistoryLatestDelay.removeAll(keepingCapacity: keepingCapacity)
+        self.proxyNodeTypes.removeAll(keepingCapacity: keepingCapacity)
+        self.proxyNodeIDs.removeAll(keepingCapacity: keepingCapacity)
+    }
+}
+
 struct MenuBarSpeedLines: Equatable {
     let up: String
     let down: String

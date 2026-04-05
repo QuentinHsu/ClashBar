@@ -253,11 +253,8 @@ extension AppSession {
 
         memory = MemorySnapshot(inuse: 0)
 
-        proxyGroups.removeAll(keepingCapacity: false)
-        proxyGroupIndex.removeAll(keepingCapacity: false)
+        self.clearPresentedProxyGroups(keepingCapacity: false)
         clearMeasuredProxyDelays()
-        proxyNodeTypes.removeAll(keepingCapacity: false)
-        proxyNodeIDs.removeAll(keepingCapacity: false)
 
         providerProxyCount = 0
         providerRuleCount = 0
@@ -351,7 +348,7 @@ extension AppSession {
             proxyProviders: proxyProviders,
             fallbackProxyProviders: self.proxyProvidersDetail)
         self.proxyGroups = presentation.groups
-        self.proxyGroupIndex = [:]
+        self.clearPresentedProxyGroupIndex()
         self.proxyHistoryLatestDelay = presentation.history
         self.proxyNodeTypes = presentation.nodeTypes
         self.proxyNodeIDs = presentation.nodeIDs
