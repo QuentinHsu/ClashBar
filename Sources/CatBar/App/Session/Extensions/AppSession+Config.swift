@@ -4,6 +4,12 @@ import UniformTypeIdentifiers
 
 @MainActor
 extension AppSession {
+    private struct ConfigImportDestination {
+        let fileName: String
+        let targetURL: URL
+        let isOverwrite: Bool
+    }
+
     private func reloadRuntimeConfigUseCase() throws -> ReloadRuntimeConfigUseCase {
         try ReloadRuntimeConfigUseCase(repository: DefaultRuntimeConfigRepository(transport: self.clientOrThrow()))
     }
@@ -29,6 +35,32 @@ extension AppSession {
         _ = self.syncSelectedConfigSelection(configRepository.selectedConfig)
         syncConfigDisplayState()
         return false
+    }
+
+    private func prepareConfigImportDestination(
+        configDirectory: URL,
+        fileName: String) -> ConfigImportDestination?
+    {
+        let targetURL = configDirectory.appendingPathComponent(fileName, isDirectory: false)
+        let isOverwrite = FileManager.default.fileExists(atPath: targetURL.path)
+        guard !isOverwrite || self.confirmOverwriteConfig(named: fileName) else {
+            appendLog(level: "info", message: tr("log.config.import.cancelled", fileName))
+            return nil
+        }
+
+        return ConfigImportDestination(
+            fileName: fileName,
+            targetURL: targetURL,
+            isOverwrite: isOverwrite)
+    }
+
+    private func replaceRemoteConfigFile(
+        from remoteURL: URL,
+        userAgent: String?,
+        targetURL: URL) async throws
+    {
+        let data = try await downloadRemoteConfigData(from: remoteURL, userAgent: userAgent)
+        try writeConfigData(data, to: targetURL)
     }
 
     func seedBundledConfigIfNeeded() {
@@ -148,27 +180,27 @@ extension AppSession {
             return
         }
 
-        let targetURL = configDirectory.appendingPathComponent(fileName, isDirectory: false)
-        let isOverwrite = FileManager.default.fileExists(atPath: targetURL.path)
-        guard !isOverwrite || self.confirmOverwriteConfig(named: fileName) else {
-            appendLog(level: "info", message: tr("log.config.import.cancelled", fileName))
+        guard let destination = self.prepareConfigImportDestination(
+            configDirectory: configDirectory,
+            fileName: fileName)
+        else {
             return
         }
 
         do {
             let data = try Data(contentsOf: sourceURL)
-            try writeConfigData(data, to: targetURL)
+            try writeConfigData(data, to: destination.targetURL)
 
-            self.updateRemoteConfigSource(for: fileName, urlString: nil)
-            appendLog(level: "info", message: tr("log.config.import_local.success", fileName))
+            self.updateRemoteConfigSource(for: destination.fileName, urlString: nil)
+            appendLog(level: "info", message: tr("log.config.import_local.success", destination.fileName))
 
-            if isOverwrite, self.shouldAutoReloadCurrentConfig(updatedFileNames: [fileName]) {
+            if destination.isOverwrite, self.shouldAutoReloadCurrentConfig(updatedFileNames: [destination.fileName]) {
                 Task { await self.reloadConfig() }
             }
         } catch {
             appendLog(
                 level: "error",
-                message: tr("log.config.import_local.failed", fileName, error.localizedDescription))
+                message: tr("log.config.import_local.failed", destination.fileName, error.localizedDescription))
         }
     }
 
@@ -192,29 +224,31 @@ extension AppSession {
             return
         }
 
-        let targetURL = configDirectory.appendingPathComponent(fileName, isDirectory: false)
-        let isOverwrite = FileManager.default.fileExists(atPath: targetURL.path)
-        guard !isOverwrite || self.confirmOverwriteConfig(named: fileName) else {
-            appendLog(level: "info", message: tr("log.config.import.cancelled", fileName))
+        guard let destination = self.prepareConfigImportDestination(
+            configDirectory: configDirectory,
+            fileName: fileName)
+        else {
             return
         }
 
         do {
             let userAgent = await remoteSubscriptionUserAgent()
-            let data = try await downloadRemoteConfigData(from: remoteURL, userAgent: userAgent)
-            try writeConfigData(data, to: targetURL)
+            try await self.replaceRemoteConfigFile(
+                from: remoteURL,
+                userAgent: userAgent,
+                targetURL: destination.targetURL)
 
-            self.updateRemoteConfigSource(for: fileName, urlString: remoteURL.absoluteString)
-            let message = tr("log.config.import_remote.success", fileName)
+            self.updateRemoteConfigSource(for: destination.fileName, urlString: remoteURL.absoluteString)
+            let message = tr("log.config.import_remote.success", destination.fileName)
             appendLog(level: "info", message: message)
 
-            if isOverwrite, self.shouldAutoReloadCurrentConfig(updatedFileNames: [fileName]) {
+            if destination.isOverwrite, self.shouldAutoReloadCurrentConfig(updatedFileNames: [destination.fileName]) {
                 await self.reloadConfig()
             }
 
             self.presentRemoteConfigImportResultAlert(success: true, message: message)
         } catch {
-            let message = tr("log.config.import_remote.failed", fileName, error.localizedDescription)
+            let message = tr("log.config.import_remote.failed", destination.fileName, error.localizedDescription)
             appendLog(level: "error", message: message)
             self.presentRemoteConfigImportResultAlert(success: false, message: message)
         }
@@ -248,8 +282,10 @@ extension AppSession {
 
             let targetURL = configDirectory.appendingPathComponent(fileName, isDirectory: false)
             do {
-                let data = try await downloadRemoteConfigData(from: remoteURL, userAgent: userAgent)
-                try writeConfigData(data, to: targetURL)
+                try await self.replaceRemoteConfigFile(
+                    from: remoteURL,
+                    userAgent: userAgent,
+                    targetURL: targetURL)
                 updatedFileNames.insert(fileName)
             } catch {
                 failedCount += 1
@@ -339,9 +375,11 @@ extension AppSession {
 
         do {
             let userAgent = await self.remoteSubscriptionUserAgent()
-            let data = try await self.downloadRemoteConfigData(from: remoteURL, userAgent: userAgent)
             let targetURL = configDirectory.appendingPathComponent(fileName, isDirectory: false)
-            try self.writeConfigData(data, to: targetURL)
+            try await self.replaceRemoteConfigFile(
+                from: remoteURL,
+                userAgent: userAgent,
+                targetURL: targetURL)
 
             self.refreshConfigStateAfterMutation()
 
