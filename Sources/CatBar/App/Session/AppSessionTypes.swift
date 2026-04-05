@@ -216,6 +216,203 @@ struct ProxyGroupPresentationState {
     }
 }
 
+struct ProxyLatencyPresentationState {
+    var groupLatencyLoading: Set<String> = []
+    var nodeLatencyLoading: Set<String> = []
+    var groupLatencyPendingDelayKeys: [String: Set<String>] = [:]
+    var groupLoadingRefCount = RefCountedPresence<String>()
+    var pendingDelayKeyRefCount = NestedRefCountedPresence<String, String>()
+    var nodeLoadingRefCount = RefCountedPresence<String>()
+    var groupLatencies: [String: [String: Int]] = [:]
+    var liveProxyLatestDelay: [String: Int] = [:]
+
+    mutating func clearMeasuredDelays() {
+        self.groupLatencies = [:]
+        self.liveProxyLatestDelay = [:]
+        self.groupLatencyLoading = []
+        self.groupLoadingRefCount.reset()
+        self.groupLatencyPendingDelayKeys = [:]
+        self.pendingDelayKeyRefCount.reset()
+        self.nodeLatencyLoading = []
+        self.nodeLoadingRefCount.reset()
+    }
+
+    mutating func ensureGroupLatencyBucket(_ groupName: String) {
+        if self.groupLatencies[groupName] == nil {
+            self.groupLatencies[groupName] = [:]
+        }
+    }
+
+    mutating func setGroupLatency(groupName: String, delayKey: String, delay: Int) {
+        self.ensureGroupLatencyBucket(groupName)
+        self.groupLatencies[groupName]?[delayKey] = delay
+    }
+
+    mutating func replaceGroupLatencies(_ delays: [String: Int], for groupName: String) {
+        self.groupLatencies[groupName] = delays
+    }
+
+    mutating func recordMeasuredProxyDelay(key: String, delay: Int) {
+        self.liveProxyLatestDelay[key] = max(delay, 0)
+    }
+
+    mutating func beginGroupLatencyLoading(_ groupName: String) {
+        self.groupLoadingRefCount.begin(groupName, into: &self.groupLatencyLoading)
+    }
+
+    mutating func endGroupLatencyLoading(_ groupName: String) {
+        self.groupLoadingRefCount.end(groupName, from: &self.groupLatencyLoading)
+    }
+
+    mutating func beginGroupLatencyPending(groupName: String, delayKey: String) {
+        self.pendingDelayKeyRefCount.begin(
+            outer: groupName,
+            inner: delayKey,
+            into: &self.groupLatencyPendingDelayKeys)
+    }
+
+    mutating func endGroupLatencyPending(groupName: String, delayKey: String) {
+        self.pendingDelayKeyRefCount.end(
+            outer: groupName,
+            inner: delayKey,
+            from: &self.groupLatencyPendingDelayKeys)
+    }
+
+    mutating func beginNodeLatencyLoading(_ nodeName: String) {
+        self.nodeLoadingRefCount.begin(nodeName, into: &self.nodeLatencyLoading)
+    }
+
+    mutating func endNodeLatencyLoading(_ nodeName: String) {
+        self.nodeLoadingRefCount.end(nodeName, from: &self.nodeLatencyLoading)
+    }
+}
+
+struct SettingsPresentationState {
+    var allowLan: Bool = false
+    var ipv6: Bool = false
+    var tcpConcurrent: Bool = false
+    var tunEnabled: Bool = false
+    var logLevel: String = ConfigLogLevel.info.rawValue
+    var port: String = "0"
+    var socksPort: String = "0"
+    var mixedPort: String = "7890"
+    var redirPort: String = "0"
+    var tproxyPort: String = "0"
+    var syncingKey: String?
+    var errorMessage: String?
+    var savedMessage: String?
+    var lastSyncedEditableSettings: EditableSettingsSnapshot?
+    var preserveLocalSettingsOnNextSync = false
+    var pendingConfigSwitchOverlaySettings: EditableSettingsSnapshot?
+    var pendingAppLaunchOverlaySettings: EditableSettingsSnapshot?
+    var suppressPersistence = false
+
+    var isCoreSettingSyncing: Bool {
+        self.syncingKey != nil
+    }
+
+    func currentEditableSettingsSnapshot() -> EditableSettingsSnapshot {
+        EditableSettingsSnapshot(
+            allowLan: self.allowLan,
+            ipv6: self.ipv6,
+            tcpConcurrent: self.tcpConcurrent,
+            tunEnabled: self.tunEnabled,
+            logLevel: self.logLevel,
+            port: self.port,
+            socksPort: self.socksPort,
+            mixedPort: self.mixedPort,
+            redirPort: self.redirPort,
+            tproxyPort: self.tproxyPort)
+    }
+
+    mutating func applyEditableSettingsSnapshot(_ snapshot: EditableSettingsSnapshot) {
+        self.allowLan = snapshot.allowLan
+        self.ipv6 = snapshot.ipv6
+        self.tcpConcurrent = snapshot.tcpConcurrent
+        self.tunEnabled = snapshot.tunEnabled
+        self.logLevel = snapshot.logLevel
+        self.port = snapshot.port
+        self.socksPort = snapshot.socksPort
+        self.mixedPort = snapshot.mixedPort
+        self.redirPort = snapshot.redirPort
+        self.tproxyPort = snapshot.tproxyPort
+    }
+
+    mutating func syncEditableFields(from previous: EditableSettingsSnapshot, to incoming: EditableSettingsSnapshot) {
+        if self.allowLan == previous.allowLan {
+            self.allowLan = incoming.allowLan
+        }
+        if self.ipv6 == previous.ipv6 {
+            self.ipv6 = incoming.ipv6
+        }
+        if self.tcpConcurrent == previous.tcpConcurrent {
+            self.tcpConcurrent = incoming.tcpConcurrent
+        }
+        if self.tunEnabled == previous.tunEnabled {
+            self.tunEnabled = incoming.tunEnabled
+        }
+        if self.logLevel == previous.logLevel {
+            self.logLevel = incoming.logLevel
+        }
+        if self.port == previous.port {
+            self.port = incoming.port
+        }
+        if self.socksPort == previous.socksPort {
+            self.socksPort = incoming.socksPort
+        }
+        if self.mixedPort == previous.mixedPort {
+            self.mixedPort = incoming.mixedPort
+        }
+        if self.redirPort == previous.redirPort {
+            self.redirPort = incoming.redirPort
+        }
+        if self.tproxyPort == previous.tproxyPort {
+            self.tproxyPort = incoming.tproxyPort
+        }
+    }
+}
+
+struct SystemProxyPresentationState {
+    var isEnabled: Bool = false
+    var enableIntentInFlight: Bool = false
+    var helperFailureReason: SystemProxyHelperFailureReason?
+    var helperFailureMessage: String?
+    var backgroundActivityAllowed: Bool?
+    var helperProcessRunning: Bool?
+    var activeDisplay: String?
+    var openFailureHint: String?
+
+    mutating func clearOpenFailureHint() {
+        self.openFailureHint = nil
+    }
+
+    mutating func updateOpenFailureHint(_ hint: String?) {
+        self.openFailureHint = hint
+    }
+
+    mutating func resetObservedState() {
+        self.backgroundActivityAllowed = nil
+        self.helperProcessRunning = nil
+        self.helperFailureReason = nil
+        self.helperFailureMessage = nil
+        if !self.isEnabled {
+            self.activeDisplay = nil
+        }
+    }
+
+    mutating func applyHelperHealthSnapshot(
+        _ snapshot: SystemProxyHelperHealthSnapshot)
+        -> (previousReason: SystemProxyHelperFailureReason?, previousMessage: String?)
+    {
+        let previous = (previousReason: self.helperFailureReason, previousMessage: self.helperFailureMessage)
+        self.backgroundActivityAllowed = snapshot.backgroundActivityAllowed
+        self.helperProcessRunning = snapshot.processRunning
+        self.helperFailureReason = snapshot.failureReason
+        self.helperFailureMessage = snapshot.rawMessage
+        return previous
+    }
+}
+
 struct MenuBarSpeedLines: Equatable {
     let up: String
     let down: String

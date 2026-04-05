@@ -344,7 +344,6 @@ extension AppSession {
         preserveLocalSettingsOnNextSync = true
         self.clearPresentedProxyGroups()
         clearMeasuredProxyDelays()
-        groupLatencyLoading = []
         appendLog(level: "info", message: tr("log.config.changed_restart"))
         cancelProviderRefresh(reason: "config switch requested")
         await self.restartCore(trigger: .configSwitch)

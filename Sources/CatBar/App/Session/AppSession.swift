@@ -46,27 +46,11 @@ final class AppSession: ObservableObject {
 
     @Published private var configPresentationState = ConfigPresentationState()
     @Published private var proxyGroupPresentationState = ProxyGroupPresentationState()
-    @Published var groupLatencyLoading: Set<String> = []
-    @Published var nodeLatencyLoading: Set<String> = []
-    @Published var groupLatencyPendingDelayKeys: [String: Set<String>] = [:]
-    var groupLoadingRefCount = RefCountedPresence<String>()
-    var pendingDelayKeyRefCount = NestedRefCountedPresence<String, String>()
-    var nodeLoadingRefCount = RefCountedPresence<String>()
-    @Published var groupLatencies: [String: [String: Int]] = [:]
-    @Published var liveProxyLatestDelay: [String: Int] = [:]
+    @Published private var proxyLatencyPresentationState = ProxyLatencyPresentationState()
     @Published private var providerPresentationState = ProviderPresentationState()
-
-    @Published var isSystemProxyEnabled: Bool = false
-    @Published var systemProxyEnableIntentInFlight: Bool = false
-    @Published var systemProxyHelperFailureReason: SystemProxyHelperFailureReason?
-    @Published var systemProxyHelperFailureMessage: String?
-    @Published var systemProxyBackgroundActivityAllowed: Bool?
-    @Published var systemProxyHelperProcessRunning: Bool?
-    @Published var systemProxyActiveDisplay: String?
-    @Published var systemProxyOpenFailureHint: String?
+    @Published private var systemProxyPresentationState = SystemProxyPresentationState()
 
     @Published var isProxySyncing: Bool = false
-    @Published var isTunEnabled: Bool = false
     @Published var isTunSyncing: Bool = false
 
     @Published var apiStatus: APIHealth = .unknown {
@@ -92,28 +76,10 @@ final class AppSession: ObservableObject {
         speedLines: nil,
         isRunning: false)
 
-    @Published var settingsAllowLan: Bool = false
-    @Published var settingsIPv6: Bool = false
-    @Published var settingsTCPConcurrent: Bool = false
-    @Published var settingsLogLevel: String = ConfigLogLevel.info.rawValue
-    @Published var settingsPort: String = "0"
-    @Published var settingsSocksPort: String = "0"
-    @Published var settingsMixedPort: String = "7890"
-    @Published var settingsRedirPort: String = "0"
-    @Published var settingsTProxyPort: String = "0"
-
-    @Published var settingsSyncingKey: String?
+    @Published private var settingsPresentationState = SettingsPresentationState()
     var isCoreSettingSyncing: Bool {
-        self.settingsSyncingKey != nil
+        self.settingsPresentationState.isCoreSettingSyncing
     }
-
-    @Published var settingsErrorMessage: String?
-    @Published var settingsSavedMessage: String?
-    var lastSyncedEditableSettings: EditableSettingsSnapshot?
-    var preserveLocalSettingsOnNextSync = false
-    var pendingConfigSwitchOverlaySettings: EditableSettingsSnapshot?
-    var pendingAppLaunchOverlaySettings: EditableSettingsSnapshot?
-    var suppressSettingsPersistence = false
 
     var runtimeVisualStatus: RuntimeVisualStatus {
         let normalized = self.statusText.lowercased()
@@ -257,6 +223,81 @@ final class AppSession: ObservableObject {
         self.proxyGroupPresentationState.proxyGroupIndex[name]
     }
 
+    func clearPresentedProxyLatencyState() {
+        self.proxyLatencyPresentationState.clearMeasuredDelays()
+    }
+
+    func ensurePresentedGroupLatencyBucket(_ groupName: String) {
+        self.proxyLatencyPresentationState.ensureGroupLatencyBucket(groupName)
+    }
+
+    func setPresentedGroupLatency(groupName: String, delayKey: String, delay: Int) {
+        self.proxyLatencyPresentationState.setGroupLatency(groupName: groupName, delayKey: delayKey, delay: delay)
+    }
+
+    func replacePresentedGroupLatencies(_ delays: [String: Int], for groupName: String) {
+        self.proxyLatencyPresentationState.replaceGroupLatencies(delays, for: groupName)
+    }
+
+    func recordPresentedLiveProxyDelay(key: String, delay: Int) {
+        self.proxyLatencyPresentationState.recordMeasuredProxyDelay(key: key, delay: delay)
+    }
+
+    func beginPresentedGroupLatencyLoading(_ groupName: String) {
+        self.proxyLatencyPresentationState.beginGroupLatencyLoading(groupName)
+    }
+
+    func endPresentedGroupLatencyLoading(_ groupName: String) {
+        self.proxyLatencyPresentationState.endGroupLatencyLoading(groupName)
+    }
+
+    func beginPresentedGroupLatencyPending(groupName: String, delayKey: String) {
+        self.proxyLatencyPresentationState.beginGroupLatencyPending(groupName: groupName, delayKey: delayKey)
+    }
+
+    func endPresentedGroupLatencyPending(groupName: String, delayKey: String) {
+        self.proxyLatencyPresentationState.endGroupLatencyPending(groupName: groupName, delayKey: delayKey)
+    }
+
+    func beginPresentedNodeLatencyLoading(_ nodeName: String) {
+        self.proxyLatencyPresentationState.beginNodeLatencyLoading(nodeName)
+    }
+
+    func endPresentedNodeLatencyLoading(_ nodeName: String) {
+        self.proxyLatencyPresentationState.endNodeLatencyLoading(nodeName)
+    }
+
+    func currentPresentedEditableSettingsSnapshot() -> EditableSettingsSnapshot {
+        self.settingsPresentationState.currentEditableSettingsSnapshot()
+    }
+
+    func applyPresentedEditableSettingsSnapshot(_ snapshot: EditableSettingsSnapshot) {
+        self.settingsPresentationState.applyEditableSettingsSnapshot(snapshot)
+    }
+
+    func syncPresentedEditableSettings(from previous: EditableSettingsSnapshot, to incoming: EditableSettingsSnapshot) {
+        self.settingsPresentationState.syncEditableFields(from: previous, to: incoming)
+    }
+
+    func clearPresentedSystemProxyOpenFailureHint() {
+        self.systemProxyPresentationState.clearOpenFailureHint()
+    }
+
+    func updatePresentedSystemProxyOpenFailureHint(_ hint: String?) {
+        self.systemProxyPresentationState.updateOpenFailureHint(hint)
+    }
+
+    func resetPresentedSystemProxyObservedState() {
+        self.systemProxyPresentationState.resetObservedState()
+    }
+
+    func applyPresentedSystemProxyHelperHealthSnapshot(
+        _ snapshot: SystemProxyHelperHealthSnapshot)
+        -> (previousReason: SystemProxyHelperFailureReason?, previousMessage: String?)
+    {
+        self.systemProxyPresentationState.applyHelperHealthSnapshot(snapshot)
+    }
+
     var isRemoteTarget: Bool {
         !self.remoteMachineStore.activeTarget.isLocal
     }
@@ -308,6 +349,31 @@ final class AppSession: ObservableObject {
     var proxyNodeIDs: [String: String] {
         get { self.proxyGroupPresentationState.proxyNodeIDs }
         set { self.proxyGroupPresentationState.proxyNodeIDs = newValue }
+    }
+
+    var groupLatencyLoading: Set<String> {
+        get { self.proxyLatencyPresentationState.groupLatencyLoading }
+        set { self.proxyLatencyPresentationState.groupLatencyLoading = newValue }
+    }
+
+    var nodeLatencyLoading: Set<String> {
+        get { self.proxyLatencyPresentationState.nodeLatencyLoading }
+        set { self.proxyLatencyPresentationState.nodeLatencyLoading = newValue }
+    }
+
+    var groupLatencyPendingDelayKeys: [String: Set<String>] {
+        get { self.proxyLatencyPresentationState.groupLatencyPendingDelayKeys }
+        set { self.proxyLatencyPresentationState.groupLatencyPendingDelayKeys = newValue }
+    }
+
+    var groupLatencies: [String: [String: Int]] {
+        get { self.proxyLatencyPresentationState.groupLatencies }
+        set { self.proxyLatencyPresentationState.groupLatencies = newValue }
+    }
+
+    var liveProxyLatestDelay: [String: Int] {
+        get { self.proxyLatencyPresentationState.liveProxyLatestDelay }
+        set { self.proxyLatencyPresentationState.liveProxyLatestDelay = newValue }
     }
 
     var errorLogs: [AppErrorLogEntry] {
@@ -362,6 +428,136 @@ final class AppSession: ObservableObject {
     var isRuleProvidersRefreshing: Bool {
         get { self.providerPresentationState.isRuleProvidersRefreshing }
         set { self.providerPresentationState.isRuleProvidersRefreshing = newValue }
+    }
+
+    var isSystemProxyEnabled: Bool {
+        get { self.systemProxyPresentationState.isEnabled }
+        set { self.systemProxyPresentationState.isEnabled = newValue }
+    }
+
+    var systemProxyEnableIntentInFlight: Bool {
+        get { self.systemProxyPresentationState.enableIntentInFlight }
+        set { self.systemProxyPresentationState.enableIntentInFlight = newValue }
+    }
+
+    var systemProxyHelperFailureReason: SystemProxyHelperFailureReason? {
+        get { self.systemProxyPresentationState.helperFailureReason }
+        set { self.systemProxyPresentationState.helperFailureReason = newValue }
+    }
+
+    var systemProxyHelperFailureMessage: String? {
+        get { self.systemProxyPresentationState.helperFailureMessage }
+        set { self.systemProxyPresentationState.helperFailureMessage = newValue }
+    }
+
+    var systemProxyBackgroundActivityAllowed: Bool? {
+        get { self.systemProxyPresentationState.backgroundActivityAllowed }
+        set { self.systemProxyPresentationState.backgroundActivityAllowed = newValue }
+    }
+
+    var systemProxyHelperProcessRunning: Bool? {
+        get { self.systemProxyPresentationState.helperProcessRunning }
+        set { self.systemProxyPresentationState.helperProcessRunning = newValue }
+    }
+
+    var systemProxyActiveDisplay: String? {
+        get { self.systemProxyPresentationState.activeDisplay }
+        set { self.systemProxyPresentationState.activeDisplay = newValue }
+    }
+
+    var systemProxyOpenFailureHint: String? {
+        get { self.systemProxyPresentationState.openFailureHint }
+        set { self.systemProxyPresentationState.openFailureHint = newValue }
+    }
+
+    var isTunEnabled: Bool {
+        get { self.settingsPresentationState.tunEnabled }
+        set { self.settingsPresentationState.tunEnabled = newValue }
+    }
+
+    var settingsAllowLan: Bool {
+        get { self.settingsPresentationState.allowLan }
+        set { self.settingsPresentationState.allowLan = newValue }
+    }
+
+    var settingsIPv6: Bool {
+        get { self.settingsPresentationState.ipv6 }
+        set { self.settingsPresentationState.ipv6 = newValue }
+    }
+
+    var settingsTCPConcurrent: Bool {
+        get { self.settingsPresentationState.tcpConcurrent }
+        set { self.settingsPresentationState.tcpConcurrent = newValue }
+    }
+
+    var settingsLogLevel: String {
+        get { self.settingsPresentationState.logLevel }
+        set { self.settingsPresentationState.logLevel = newValue }
+    }
+
+    var settingsPort: String {
+        get { self.settingsPresentationState.port }
+        set { self.settingsPresentationState.port = newValue }
+    }
+
+    var settingsSocksPort: String {
+        get { self.settingsPresentationState.socksPort }
+        set { self.settingsPresentationState.socksPort = newValue }
+    }
+
+    var settingsMixedPort: String {
+        get { self.settingsPresentationState.mixedPort }
+        set { self.settingsPresentationState.mixedPort = newValue }
+    }
+
+    var settingsRedirPort: String {
+        get { self.settingsPresentationState.redirPort }
+        set { self.settingsPresentationState.redirPort = newValue }
+    }
+
+    var settingsTProxyPort: String {
+        get { self.settingsPresentationState.tproxyPort }
+        set { self.settingsPresentationState.tproxyPort = newValue }
+    }
+
+    var settingsSyncingKey: String? {
+        get { self.settingsPresentationState.syncingKey }
+        set { self.settingsPresentationState.syncingKey = newValue }
+    }
+
+    var settingsErrorMessage: String? {
+        get { self.settingsPresentationState.errorMessage }
+        set { self.settingsPresentationState.errorMessage = newValue }
+    }
+
+    var settingsSavedMessage: String? {
+        get { self.settingsPresentationState.savedMessage }
+        set { self.settingsPresentationState.savedMessage = newValue }
+    }
+
+    var lastSyncedEditableSettings: EditableSettingsSnapshot? {
+        get { self.settingsPresentationState.lastSyncedEditableSettings }
+        set { self.settingsPresentationState.lastSyncedEditableSettings = newValue }
+    }
+
+    var preserveLocalSettingsOnNextSync: Bool {
+        get { self.settingsPresentationState.preserveLocalSettingsOnNextSync }
+        set { self.settingsPresentationState.preserveLocalSettingsOnNextSync = newValue }
+    }
+
+    var pendingConfigSwitchOverlaySettings: EditableSettingsSnapshot? {
+        get { self.settingsPresentationState.pendingConfigSwitchOverlaySettings }
+        set { self.settingsPresentationState.pendingConfigSwitchOverlaySettings = newValue }
+    }
+
+    var pendingAppLaunchOverlaySettings: EditableSettingsSnapshot? {
+        get { self.settingsPresentationState.pendingAppLaunchOverlaySettings }
+        set { self.settingsPresentationState.pendingAppLaunchOverlaySettings = newValue }
+    }
+
+    var suppressSettingsPersistence: Bool {
+        get { self.settingsPresentationState.suppressPersistence }
+        set { self.settingsPresentationState.suppressPersistence = newValue }
     }
 
     var isTunToggleEnabled: Bool {

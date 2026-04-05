@@ -16,15 +16,15 @@ extension AppSession {
     }
 
     func clearSystemProxyOpenFailureHint() {
-        self.systemProxyOpenFailureHint = nil
+        self.clearPresentedSystemProxyOpenFailureHint()
     }
 
     func updateSystemProxyOpenFailureHint(for error: Error) {
-        self.systemProxyOpenFailureHint = self.systemProxyFailureHintMessage(for: error)
+        self.updatePresentedSystemProxyOpenFailureHint(self.systemProxyFailureHintMessage(for: error))
     }
 
     func updateSystemProxyOpenFailureHint(for reason: SystemProxyHelperFailureReason) {
-        self.systemProxyOpenFailureHint = self.systemProxyFailureReasonMessage(for: reason)
+        self.updatePresentedSystemProxyOpenFailureHint(self.systemProxyFailureReasonMessage(for: reason))
     }
 
     var hasSystemProxyOpenIntent: Bool {
@@ -35,27 +35,15 @@ extension AppSession {
     }
 
     func resetSystemProxyObservedState() {
-        self.systemProxyBackgroundActivityAllowed = nil
-        self.systemProxyHelperProcessRunning = nil
-        self.systemProxyHelperFailureReason = nil
-        self.systemProxyHelperFailureMessage = nil
-        if !self.isSystemProxyEnabled {
-            self.systemProxyActiveDisplay = nil
-        }
+        self.resetPresentedSystemProxyObservedState()
     }
 
     private func applyHelperHealthSnapshot(_ snapshot: SystemProxyHelperHealthSnapshot) {
-        let previousReason = self.systemProxyHelperFailureReason
-        let previousMessage = self.systemProxyHelperFailureMessage
-
-        self.systemProxyBackgroundActivityAllowed = snapshot.backgroundActivityAllowed
-        self.systemProxyHelperProcessRunning = snapshot.processRunning
-        self.systemProxyHelperFailureReason = snapshot.failureReason
-        self.systemProxyHelperFailureMessage = snapshot.rawMessage
+        let previous = self.applyPresentedSystemProxyHelperHealthSnapshot(snapshot)
 
         guard let failureReason = snapshot.failureReason else { return }
 
-        if snapshot.rawMessage != previousMessage || failureReason != previousReason {
+        if snapshot.rawMessage != previous.previousMessage || failureReason != previous.previousReason {
             let message = snapshot.rawMessage ?? self.systemProxyFailureReasonMessage(for: failureReason)
             appendLog(level: "error", message: tr("log.system_proxy.helper_failed", message))
         }

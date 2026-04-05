@@ -276,10 +276,10 @@ extension AppSession {
         let delay = await self.testSingleNodeLatency(nodeName: nodeName, testURL: testURL, timeout: timeout)
 
         if let groupName, let finalDelay = delay {
-            if self.groupLatencies[groupName] == nil {
-                self.groupLatencies[groupName] = [:]
-            }
-            self.groupLatencies[groupName]?[self.proxyDelayLookupKey(nodeName: nodeName)] = finalDelay
+            self.setPresentedGroupLatency(
+                groupName: groupName,
+                delayKey: self.proxyDelayLookupKey(nodeName: nodeName),
+                delay: finalDelay)
         }
     }
 
@@ -340,15 +340,8 @@ extension AppSession {
     }
 
     func clearMeasuredProxyDelays() {
-        self.groupLatencies = [:]
-        self.liveProxyLatestDelay = [:]
+        self.clearPresentedProxyLatencyState()
         self.proxyHistoryLatestDelay = [:]
-        self.groupLatencyLoading = []
-        self.groupLoadingRefCount.reset()
-        self.groupLatencyPendingDelayKeys = [:]
-        self.pendingDelayKeyRefCount.reset()
-        self.nodeLatencyLoading = []
-        self.nodeLoadingRefCount.reset()
     }
 
     func rebuildProxyGroupIndex() {
@@ -387,7 +380,7 @@ extension AppSession {
             let key = useProxyIdentityLookup
                 ? self.proxyDelayLookupKey(nodeName: name)
                 : name
-            self.liveProxyLatestDelay[key] = max(delay, 0)
+            self.recordPresentedLiveProxyDelay(key: key, delay: delay)
         }
     }
 
@@ -464,17 +457,15 @@ extension AppSession {
         var remainingGroupJobs = measurementPlan.groupPendingCounts
 
         for group in nodeGroups {
-            self.beginGroupLatencyLoading(group.name)
-            if self.groupLatencies[group.name] == nil {
-                self.groupLatencies[group.name] = [:]
-            }
+            self.beginPresentedGroupLatencyLoading(group.name)
+            self.ensurePresentedGroupLatencyBucket(group.name)
             for delayKey in measurementPlan.groupPendingDelayKeys[group.name] ?? [] {
-                self.beginGroupLatencyPending(groupName: group.name, delayKey: delayKey)
+                self.beginPresentedGroupLatencyPending(groupName: group.name, delayKey: delayKey)
             }
         }
 
         for group in nodeGroups where (remainingGroupJobs[group.name] ?? 0) == 0 {
-            self.endGroupLatencyLoading(group.name)
+            self.endPresentedGroupLatencyLoading(group.name)
         }
 
         var wholeGroupDirectNodes: [String: [String]] = [:]
@@ -482,12 +473,10 @@ extension AppSession {
             let directNodes = measurementPlan.groupDirectNodes[group.name]
                 ?? self.directLatencyTestNodes(in: group)
             wholeGroupDirectNodes[group.name] = directNodes
-            self.beginGroupLatencyLoading(group.name)
-            if self.groupLatencies[group.name] == nil {
-                self.groupLatencies[group.name] = [:]
-            }
+            self.beginPresentedGroupLatencyLoading(group.name)
+            self.ensurePresentedGroupLatencyBucket(group.name)
             for delayKey in directNodes.map({ self.proxyDelayLookupKey(nodeName: $0) }) {
-                self.beginGroupLatencyPending(groupName: group.name, delayKey: delayKey)
+                self.beginPresentedGroupLatencyPending(groupName: group.name, delayKey: delayKey)
             }
         }
 
@@ -738,22 +727,22 @@ extension AppSession {
                 url: testURL,
                 timeout: timeout)
             let delays = self.normalizedMeasuredDelays(response.values)
-            self.groupLatencies[group.name] = delays
+            self.replacePresentedGroupLatencies(delays, for: group.name)
             self.recordMeasuredProxyDelays(delays)
         } catch {
             let delays = nodes.reduce(into: [:]) { partialResult, nodeName in
                 partialResult[self.proxyDelayLookupKey(nodeName: nodeName)] = 0
             }
-            self.groupLatencies[group.name] = delays
+            self.replacePresentedGroupLatencies(delays, for: group.name)
             self.recordMeasuredProxyDelays(delays)
         }
 
         await self.refreshProxyGroups()
 
         for delayKey in nodes.map({ self.proxyDelayLookupKey(nodeName: $0) }) {
-            self.endGroupLatencyPending(groupName: group.name, delayKey: delayKey)
+            self.endPresentedGroupLatencyPending(groupName: group.name, delayKey: delayKey)
         }
-        self.endGroupLatencyLoading(group.name)
+        self.endPresentedGroupLatencyLoading(group.name)
     }
 
     private func applyMeasuredDelay(
@@ -765,16 +754,16 @@ extension AppSession {
         self.recordMeasuredProxyDelays([jobKey.proxyKey: delay])
 
         for target in plan.jobTargets[jobKey] ?? [] {
-            if self.groupLatencies[target.groupName] == nil {
-                self.groupLatencies[target.groupName] = [:]
-            }
-            self.groupLatencies[target.groupName]?[target.delayKey] = delay
-            self.endGroupLatencyPending(groupName: target.groupName, delayKey: target.delayKey)
+            self.setPresentedGroupLatency(
+                groupName: target.groupName,
+                delayKey: target.delayKey,
+                delay: delay)
+            self.endPresentedGroupLatencyPending(groupName: target.groupName, delayKey: target.delayKey)
 
             let nextCount = max(0, (remainingGroupJobs[target.groupName] ?? 0) - 1)
             remainingGroupJobs[target.groupName] = nextCount
             if nextCount == 0 {
-                self.endGroupLatencyLoading(target.groupName)
+                self.endPresentedGroupLatencyLoading(target.groupName)
             }
         }
     }
@@ -848,33 +837,27 @@ extension AppSession {
     }
 
     private func beginGroupLatencyLoading(_ groupName: String) {
-        self.groupLoadingRefCount.begin(groupName, into: &self.groupLatencyLoading)
+        self.beginPresentedGroupLatencyLoading(groupName)
     }
 
     private func endGroupLatencyLoading(_ groupName: String) {
-        self.groupLoadingRefCount.end(groupName, from: &self.groupLatencyLoading)
+        self.endPresentedGroupLatencyLoading(groupName)
     }
 
     private func beginGroupLatencyPending(groupName: String, delayKey: String) {
-        self.pendingDelayKeyRefCount.begin(
-            outer: groupName,
-            inner: delayKey,
-            into: &self.groupLatencyPendingDelayKeys)
+        self.beginPresentedGroupLatencyPending(groupName: groupName, delayKey: delayKey)
     }
 
     private func endGroupLatencyPending(groupName: String, delayKey: String) {
-        self.pendingDelayKeyRefCount.end(
-            outer: groupName,
-            inner: delayKey,
-            from: &self.groupLatencyPendingDelayKeys)
+        self.endPresentedGroupLatencyPending(groupName: groupName, delayKey: delayKey)
     }
 
     private func beginNodeLatencyLoading(_ nodeName: String) {
-        self.nodeLoadingRefCount.begin(nodeName, into: &self.nodeLatencyLoading)
+        self.beginPresentedNodeLatencyLoading(nodeName)
     }
 
     private func endNodeLatencyLoading(_ nodeName: String) {
-        self.nodeLoadingRefCount.end(nodeName, from: &self.nodeLatencyLoading)
+        self.endPresentedNodeLatencyLoading(nodeName)
     }
 
     func controllerHost() -> String {

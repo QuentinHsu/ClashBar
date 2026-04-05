@@ -148,34 +148,14 @@ extension AppSession {
         }
 
         guard let previous = lastSyncedEditableSettings else {
-            self.applyEditableSettingsSnapshotToUI(incoming)
+            self.applyPresentedEditableSettingsSnapshot(incoming)
             lastSyncedEditableSettings = incoming
             persistEditableSettingsSnapshot()
             return
         }
 
         suppressSettingsPersistence = true
-        self.syncEditableFields(
-            from: previous,
-            to: incoming,
-            fields: [
-                (\.settingsAllowLan, \.allowLan),
-                (\.settingsIPv6, \.ipv6),
-                (\.settingsTCPConcurrent, \.tcpConcurrent),
-                (\.isTunEnabled, \.tunEnabled),
-            ])
-
-        self.syncEditableFields(
-            from: previous,
-            to: incoming,
-            fields: [
-                (\.settingsLogLevel, \.logLevel),
-                (\.settingsPort, \.port),
-                (\.settingsSocksPort, \.socksPort),
-                (\.settingsMixedPort, \.mixedPort),
-                (\.settingsRedirPort, \.redirPort),
-                (\.settingsTProxyPort, \.tproxyPort),
-            ])
+        self.syncPresentedEditableSettings(from: previous, to: incoming)
         suppressSettingsPersistence = false
 
         lastSyncedEditableSettings = incoming
@@ -183,17 +163,7 @@ extension AppSession {
     }
 
     func currentEditableSettingsSnapshot() -> EditableSettingsSnapshot {
-        EditableSettingsSnapshot(
-            allowLan: settingsAllowLan,
-            ipv6: settingsIPv6,
-            tcpConcurrent: settingsTCPConcurrent,
-            tunEnabled: isTunEnabled,
-            logLevel: settingsLogLevel,
-            port: settingsPort,
-            socksPort: settingsSocksPort,
-            mixedPort: settingsMixedPort,
-            redirPort: settingsRedirPort,
-            tproxyPort: settingsTProxyPort)
+        self.currentPresentedEditableSettingsSnapshot()
     }
 
     func applyPendingConfigSwitchSettingsOverlayIfNeeded() async {
@@ -299,16 +269,7 @@ extension AppSession {
 
     func applyEditableSettingsSnapshotToUI(_ snapshot: EditableSettingsSnapshot) {
         suppressSettingsPersistence = true
-        settingsAllowLan = snapshot.allowLan
-        settingsIPv6 = snapshot.ipv6
-        settingsTCPConcurrent = snapshot.tcpConcurrent
-        isTunEnabled = snapshot.tunEnabled
-        settingsLogLevel = snapshot.logLevel
-        settingsPort = snapshot.port
-        settingsSocksPort = snapshot.socksPort
-        settingsMixedPort = snapshot.mixedPort
-        settingsRedirPort = snapshot.redirPort
-        settingsTProxyPort = snapshot.tproxyPort
+        self.applyPresentedEditableSettingsSnapshot(snapshot)
         suppressSettingsPersistence = false
     }
 
@@ -546,17 +507,6 @@ extension AppSession {
             settingsErrorMessage = tr(errorMessageKey, "unknown")
             settingsSavedMessage = nil
             return nil
-        }
-    }
-
-    private func syncEditableFields<Value: Equatable>(
-        from previous: EditableSettingsSnapshot,
-        to incoming: EditableSettingsSnapshot,
-        fields: [(ReferenceWritableKeyPath<AppSession, Value>, KeyPath<EditableSettingsSnapshot, Value>)])
-    {
-        for (stateKeyPath, snapshotKeyPath) in fields {
-            guard self[keyPath: stateKeyPath] == previous[keyPath: snapshotKeyPath] else { continue }
-            self[keyPath: stateKeyPath] = incoming[keyPath: snapshotKeyPath]
         }
     }
 
