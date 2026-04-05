@@ -44,11 +44,7 @@ final class AppSession: ObservableObject {
     @Published var tproxyPort: Int?
     @Published var mixedPort: Int = 7890
 
-    @Published var mihomoBinaryPath: String = "-"
-    @Published var selectedConfigName: String = "-"
-    @Published var configDirectoryPath: String = "-"
-    @Published var availableConfigFileNames: [String] = []
-    @Published var remoteConfigMenuStates: [String: RemoteConfigMenuState] = [:]
+    @Published private var configPresentationState = ConfigPresentationState()
 
     @Published var proxyGroups: [ProxyGroup] = []
     @Published var groupLatencyLoading: Set<String> = []
@@ -232,12 +228,43 @@ final class AppSession: ObservableObject {
         self.menuBarDisplaySnapshot = next
     }
 
+    func syncConfigPresentationState(path: String, availableFileNames: [String]) {
+        self.configPresentationState.syncConfigDirectory(
+            path: path,
+            availableFileNames: availableFileNames)
+    }
+
     var isRemoteTarget: Bool {
         !self.remoteMachineStore.activeTarget.isLocal
     }
 
     var isModeSwitchEnabled: Bool {
         (self.isRemoteTarget || self.coreRepository.isRunning) && self.apiStatus == .healthy
+    }
+
+    var mihomoBinaryPath: String {
+        get { self.configPresentationState.mihomoBinaryPath }
+        set { self.configPresentationState.mihomoBinaryPath = newValue }
+    }
+
+    var selectedConfigName: String {
+        get { self.configPresentationState.selectedConfigName }
+        set { self.configPresentationState.selectedConfigName = newValue }
+    }
+
+    var configDirectoryPath: String {
+        get { self.configPresentationState.configDirectoryPath }
+        set { self.configPresentationState.configDirectoryPath = newValue }
+    }
+
+    var availableConfigFileNames: [String] {
+        get { self.configPresentationState.availableConfigFileNames }
+        set { self.configPresentationState.availableConfigFileNames = newValue }
+    }
+
+    var remoteConfigMenuStates: [String: RemoteConfigMenuState] {
+        get { self.configPresentationState.remoteConfigMenuStates }
+        set { self.configPresentationState.remoteConfigMenuStates = newValue }
     }
 
     var providerProxyCount: Int {

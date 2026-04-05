@@ -64,11 +64,9 @@ extension AppSession {
     }
 
     func syncConfigDisplayState() {
-        configDirectoryPath = configRepository.configDirectory?.path ?? "-"
-        availableConfigFileNames = configRepository.availableConfigs.map(\.lastPathComponent)
-        if selectedConfigName == "-", let first = availableConfigFileNames.first {
-            selectedConfigName = first
-        }
+        self.syncConfigPresentationState(
+            path: configRepository.configDirectory?.path ?? "-",
+            availableFileNames: configRepository.availableConfigs.map(\.lastPathComponent))
         self.pruneRemoteConfigSourcesIfNeeded()
     }
 

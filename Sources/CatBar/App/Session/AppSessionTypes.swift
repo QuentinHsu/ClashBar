@@ -155,6 +155,22 @@ struct ProviderPresentationState {
     var isRuleProvidersRefreshing: Bool = false
 }
 
+struct ConfigPresentationState {
+    var mihomoBinaryPath: String = "-"
+    var selectedConfigName: String = "-"
+    var configDirectoryPath: String = "-"
+    var availableConfigFileNames: [String] = []
+    var remoteConfigMenuStates: [String: RemoteConfigMenuState] = [:]
+
+    mutating func syncConfigDirectory(path: String, availableFileNames: [String]) {
+        self.configDirectoryPath = path
+        self.availableConfigFileNames = availableFileNames
+        if self.selectedConfigName == "-", let first = availableFileNames.first {
+            self.selectedConfigName = first
+        }
+    }
+}
+
 struct MenuBarSpeedLines: Equatable {
     let up: String
     let down: String
