@@ -27,6 +27,10 @@ extension AppSession {
         CoreFeatureRecoveryTransitionResolver()
     }
 
+    private var resolveCoreFeatureRecoveryAttemptUseCase: ResolveCoreFeatureRecoveryAttemptUseCase {
+        ResolveCoreFeatureRecoveryAttemptUseCase()
+    }
+
     private struct CoreBootstrapOptions {
         let overlaySyncingKey: String
         let providerTrigger: ProviderRefreshTrigger
@@ -514,79 +518,84 @@ extension AppSession {
     }
 
     func restoreCoreFeaturesAfterStartupIfNeeded() async {
-        guard let recovery = self.pendingCoreFeatureRecoveryState else { return }
-        guard recovery.shouldRecoverAnyFeature else {
+        switch self.resolveCoreFeatureRecoveryAttemptUseCase.execute(.init(
+            pendingRecovery: self.pendingCoreFeatureRecoveryState,
+            isRuntimeRunning: self.isRuntimeRunning,
+            autoManageCoreOnNetworkChangeEnabled: self.autoManageCoreOnNetworkChangeEnabled,
+            networkReachabilityStatus: self.networkReachabilityStatus))
+        {
+        case .skip:
+            return
+        case .clearPendingState:
             self.pendingCoreFeatureRecoveryState = nil
             return
+        case let .attempt(recovery):
+            let tunRestored = await self.restoreTunFeatureIfNeeded(requested: recovery.tunEnabled)
+            let systemProxyRestored = await self.restoreSystemProxyFeatureIfNeeded(
+                requested: recovery.systemProxyEnabled)
+
+            let remaining = CoreFeatureRecoveryState(
+                systemProxyEnabled: recovery.systemProxyEnabled && !systemProxyRestored,
+                tunEnabled: recovery.tunEnabled && !tunRestored)
+            self.pendingCoreFeatureRecoveryState = remaining.pendingState
         }
-        guard self.isRuntimeRunning else { return }
+    }
 
-        if self.autoManageCoreOnNetworkChangeEnabled, self.networkReachabilityStatus == .offline {
-            return
-        }
+    private func restoreTunFeatureIfNeeded(requested: Bool) async -> Bool {
+        guard requested else { return false }
 
-        var remainingSystemProxyRecovery = recovery.systemProxyEnabled
-        var remainingTunRecovery = recovery.tunEnabled
-
-        if recovery.tunEnabled {
-            var tunRestored = false
-            do {
-                let runtimeConfig = try await self.fetchRuntimeConfigSnapshot()
-                if runtimeConfig.tunEnabled != true {
-                    try await self.patchTunConfig(enable: true)
-                    try await self.verifyTunRuntimeState(expectedEnabled: true)
-                    tunRestored = true
-                } else if self.isTunEnabled {
-                    tunRestored = true
-                }
-            } catch {
-                self.appendLog(
-                    level: "error",
-                    message: self.tr("log.tun.toggle_failed", self.tunErrorMessage(error)))
+        do {
+            let runtimeConfig = try await self.fetchRuntimeConfigSnapshot()
+            if runtimeConfig.tunEnabled != true {
+                try await self.patchTunConfig(enable: true)
+                try await self.verifyTunRuntimeState(expectedEnabled: true)
+            } else if !self.isTunEnabled {
+                return false
             }
-
-            if tunRestored {
-                self.isTunEnabled = true
-                self.persistEditableSettingsSnapshot()
-                remainingTunRecovery = false
-                self.appendLog(level: "info", message: self.tr("log.tun.toggled", self.tr("log.tun.enabled")))
-            }
+        } catch {
+            self.appendLog(
+                level: "error",
+                message: self.tr("log.tun.toggle_failed", self.tunErrorMessage(error)))
+            return false
         }
 
-        if recovery.systemProxyEnabled {
-            self.isProxySyncing = true
-            defer { self.isProxySyncing = false }
+        self.isTunEnabled = true
+        self.persistEditableSettingsSnapshot()
+        self.appendLog(level: "info", message: self.tr("log.tun.toggled", self.tr("log.tun.enabled")))
+        return true
+    }
 
-            do {
-                let target = try self.resolveSystemProxyTargetFromState()
-                let isAlreadyConfigured = try await self.isSystemProxyConfigured(
-                    host: target.host,
-                    ports: target.ports)
-                if !isAlreadyConfigured {
-                    try await self.applySystemProxy(enabled: true, host: target.host, ports: target.ports)
-                }
-                self.isSystemProxyEnabled = true
-                self.clearSystemProxyOpenFailureHint()
-                self.systemProxyActiveDisplay = self.buildSystemProxyDisplayString(
-                    host: target.host,
-                    ports: target.ports)
-                remainingSystemProxyRecovery = false
-                self.appendLog(
-                    level: "info",
-                    message: self.tr("log.system_proxy.toggled", self.tr("log.system_proxy.enabled")))
-            } catch {
-                self.appendLog(
-                    level: "error",
-                    message: self.tr("log.system_proxy.toggle_failed", self.systemProxyErrorMessage(error)))
-                self.updateSystemProxyOpenFailureHint(for: error)
-                await self.refreshSystemProxyHelperStatus()
-                await self.refreshSystemProxyStatus()
+    private func restoreSystemProxyFeatureIfNeeded(requested: Bool) async -> Bool {
+        guard requested else { return false }
+
+        self.isProxySyncing = true
+        defer { self.isProxySyncing = false }
+
+        do {
+            let target = try self.resolveSystemProxyTargetFromState()
+            let isAlreadyConfigured = try await self.isSystemProxyConfigured(
+                host: target.host,
+                ports: target.ports)
+            if !isAlreadyConfigured {
+                try await self.applySystemProxy(enabled: true, host: target.host, ports: target.ports)
             }
+            self.isSystemProxyEnabled = true
+            self.clearSystemProxyOpenFailureHint()
+            self.systemProxyActiveDisplay = self.buildSystemProxyDisplayString(
+                host: target.host,
+                ports: target.ports)
+            self.appendLog(
+                level: "info",
+                message: self.tr("log.system_proxy.toggled", self.tr("log.system_proxy.enabled")))
+            return true
+        } catch {
+            self.appendLog(
+                level: "error",
+                message: self.tr("log.system_proxy.toggle_failed", self.systemProxyErrorMessage(error)))
+            self.updateSystemProxyOpenFailureHint(for: error)
+            await self.refreshSystemProxyHelperStatus()
+            await self.refreshSystemProxyStatus()
+            return false
         }
-
-        let remaining = CoreFeatureRecoveryState(
-            systemProxyEnabled: remainingSystemProxyRecovery,
-            tunEnabled: remainingTunRecovery)
-        self.pendingCoreFeatureRecoveryState = remaining.pendingState
     }
 }

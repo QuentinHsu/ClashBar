@@ -4,6 +4,10 @@ import UniformTypeIdentifiers
 
 @MainActor
 extension AppSession {
+    private var resolveConfigSelectionTransitionUseCase: ResolveConfigSelectionTransitionUseCase {
+        ResolveConfigSelectionTransitionUseCase()
+    }
+
     private var resolveRemoteConfigRefreshTargetUseCase: ResolveRemoteConfigRefreshTargetUseCase {
         ResolveRemoteConfigRefreshTargetUseCase()
     }
@@ -102,21 +106,19 @@ extension AppSession {
 
     func selectConfig() async {
         let previousSelectedURL = configRepository.selectedConfig
-        let previousSelectedPath = configRepository.selectedConfig?.path
         guard configRepository.chooseConfigDirectory() != nil else { return }
 
-        let nextSelectedURL = configRepository.selectedConfig
-        let previousCanonicalPath = self.canonicalConfigPath(previousSelectedURL)
-        let nextCanonicalPath = self.canonicalConfigPath(nextSelectedURL)
+        let transition = self.resolveConfigSelectionTransitionUseCase.execute(
+            previousSelectedURL: previousSelectedURL,
+            nextSelectedURL: configRepository.selectedConfig,
+            coreIsRunning: coreRepository.isRunning,
+            validationTiming: .afterSelection)
 
-        if coreRepository.isRunning,
-           let nextSelectedURL,
-           previousCanonicalPath != nextCanonicalPath
-        {
+        if let validationRequest = transition.validationRequest {
             guard await self.validateConfigSelectionIfNeeded(
                 previousSelectedURL: previousSelectedURL,
-                targetSelectedURL: nextSelectedURL,
-                staleSelectionCanonicalPath: nextCanonicalPath)
+                targetSelectedURL: validationRequest.targetSelectedURL,
+                staleSelectionCanonicalPath: validationRequest.staleSelectionCanonicalPath)
             else {
                 return
             }
@@ -126,28 +128,29 @@ extension AppSession {
         syncConfigDisplayState()
 
         appendLog(level: "info", message: tr("log.config.loaded_count", configRepository.availableConfigs.count))
-        await restartCoreIfNeededForConfigSwitch(previousPath: previousSelectedPath, nextPath: nextSelectedPath)
+        await restartCoreIfNeededForConfigSwitch(
+            previousPath: transition.previousSelectedPath,
+            nextPath: nextSelectedPath)
     }
 
     func selectConfigFile(named fileName: String) async {
         let previousSelectedURL = configRepository.selectedConfig
-        let previousSelectedPath = configRepository.selectedConfig?.path
         guard let matched = configRepository.availableConfigs.first(where: { $0.lastPathComponent == fileName }) else {
             appendLog(level: "error", message: tr("log.config.not_found", fileName))
             return
         }
 
-        let previousCanonicalPath = self.canonicalConfigPath(previousSelectedURL)
-        let targetCanonicalPath = self.canonicalConfigPath(matched)
+        let transition = self.resolveConfigSelectionTransitionUseCase.execute(
+            previousSelectedURL: previousSelectedURL,
+            nextSelectedURL: matched,
+            coreIsRunning: coreRepository.isRunning,
+            validationTiming: .beforeSelection)
 
-        if coreRepository.isRunning,
-           previousCanonicalPath != targetCanonicalPath
-        {
-            // Validation runs before selecting `matched`, so stale-check against the original selection.
+        if let validationRequest = transition.validationRequest {
             guard await self.validateConfigSelectionIfNeeded(
                 previousSelectedURL: previousSelectedURL,
-                targetSelectedURL: matched,
-                staleSelectionCanonicalPath: previousCanonicalPath)
+                targetSelectedURL: validationRequest.targetSelectedURL,
+                staleSelectionCanonicalPath: validationRequest.staleSelectionCanonicalPath)
             else {
                 return
             }
@@ -157,7 +160,9 @@ extension AppSession {
         let nextSelectedPath = self.syncSelectedConfigSelection(matched)
         syncConfigDisplayState()
         appendLog(level: "info", message: tr("log.config.selected", fileName))
-        await restartCoreIfNeededForConfigSwitch(previousPath: previousSelectedPath, nextPath: nextSelectedPath)
+        await restartCoreIfNeededForConfigSwitch(
+            previousPath: transition.previousSelectedPath,
+            nextPath: nextSelectedPath)
     }
 
     func importLocalConfigFile() {
