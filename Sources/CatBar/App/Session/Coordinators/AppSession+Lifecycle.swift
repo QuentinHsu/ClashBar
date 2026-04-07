@@ -279,19 +279,9 @@ extension AppSession {
     /// in `applicationShouldTerminate(.terminateLater)`.
     func performTerminationCleanup() async {
         self.prepareForTermination()
-
-        if self.isSystemProxyEnabled {
-            try? await self.applySystemProxy(
-                enabled: false,
-                host: self.controllerHost(),
-                ports: .disabled)
-        }
-
-        if coreRepository.isRunning {
-            await self.stopCoreUseCase.execute()
-        }
-
-        self.isPanelPresented = false
+        await self.disableSystemProxyForTerminationIfNeeded()
+        await self.stopCoreForTerminationIfNeeded()
+        self.finishTerminationCleanup()
     }
 
     private func prepareForTermination() {
@@ -302,6 +292,23 @@ extension AppSession {
         self.cancelDeferredEditableSettingsOverlaySync()
         cancelProviderRefresh(reason: "quit requested")
         cancelPolling()
+    }
+
+    private func disableSystemProxyForTerminationIfNeeded() async {
+        guard self.isSystemProxyEnabled else { return }
+        try? await self.applySystemProxy(
+            enabled: false,
+            host: self.controllerHost(),
+            ports: .disabled)
+    }
+
+    private func stopCoreForTerminationIfNeeded() async {
+        guard coreRepository.isRunning else { return }
+        await self.stopCoreUseCase.execute()
+    }
+
+    private func finishTerminationCleanup() {
+        self.isPanelPresented = false
     }
 
     func applyAppAppearance() {
