@@ -6,6 +6,10 @@ extension AppSession {
         BuildEditableSettingsOverlayPatchBodyUseCase()
     }
 
+    private var resolveEditableSettingsSyncPlanUseCase: ResolveEditableSettingsSyncPlanUseCase {
+        ResolveEditableSettingsSyncPlanUseCase()
+    }
+
     private var buildPortPatchBodyUseCase: BuildPortPatchBodyUseCase {
         BuildPortPatchBodyUseCase()
     }
@@ -143,27 +147,11 @@ extension AppSession {
 
     func syncEditableSettings(from config: ConfigSnapshot) {
         let incoming = EditableSettingsSnapshot(config: config)
-
-        if preserveLocalSettingsOnNextSync {
-            preserveLocalSettingsOnNextSync = false
-            lastSyncedEditableSettings = incoming
-            persistEditableSettingsSnapshot()
-            return
-        }
-
-        guard let previous = lastSyncedEditableSettings else {
-            self.applyPresentedEditableSettingsSnapshot(incoming)
-            lastSyncedEditableSettings = incoming
-            persistEditableSettingsSnapshot()
-            return
-        }
-
-        suppressSettingsPersistence = true
-        self.syncPresentedEditableSettings(from: previous, to: incoming)
-        suppressSettingsPersistence = false
-
-        lastSyncedEditableSettings = incoming
-        persistEditableSettingsSnapshot()
+        let plan = self.resolveEditableSettingsSyncPlanUseCase.execute(
+            intent: .configRefresh(preserveLocalState: preserveLocalSettingsOnNextSync),
+            previous: lastSyncedEditableSettings,
+            incoming: incoming)
+        self.applyEditableSettingsSyncPlan(plan)
     }
 
     func currentEditableSettingsSnapshot() -> EditableSettingsSnapshot {
@@ -562,13 +550,31 @@ extension AppSession {
         await self.applySettingBool(key: configKey, value: value)
     }
 
+    private func applyEditableSettingsSyncPlan(_ plan: EditableSettingsSyncPlan) {
+        switch plan {
+        case .preserveLocal:
+            preserveLocalSettingsOnNextSync = false
+        case let .applySnapshot(snapshot):
+            self.applyEditableSettingsSnapshotToUI(snapshot)
+        case let .syncPresented(previous, incoming):
+            suppressSettingsPersistence = true
+            self.syncPresentedEditableSettings(from: previous, to: incoming)
+            suppressSettingsPersistence = false
+        }
+
+        lastSyncedEditableSettings = plan.incomingSnapshot
+        persistEditableSettingsSnapshot()
+    }
+
     private func reconcileEditableSettingsWithRuntimeConfig() async {
         do {
             let config = try await self.fetchRuntimeConfigSnapshot()
             let incoming = EditableSettingsSnapshot(config: config)
-            self.applyEditableSettingsSnapshotToUI(incoming)
-            self.lastSyncedEditableSettings = incoming
-            self.persistEditableSettingsSnapshot()
+            let plan = self.resolveEditableSettingsSyncPlanUseCase.execute(
+                intent: .runtimeReconciliation,
+                previous: lastSyncedEditableSettings,
+                incoming: incoming)
+            self.applyEditableSettingsSyncPlan(plan)
         } catch {
             appendLog(level: "error", message: "Settings reconciliation failed: \(error.localizedDescription)")
         }
