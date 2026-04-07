@@ -215,7 +215,7 @@ extension AppSession {
     {
         self.deferredEditableSettingsOverlay = request
         if await self.applyDeferredEditableSettingsOverlayIfPossible() {
-            self.clearDeferredEditableSettingsOverlayTask()
+            self.cancelDeferredEditableSettingsOverlayTask()
             return
         }
 
@@ -223,7 +223,7 @@ extension AppSession {
     }
 
     func cancelDeferredEditableSettingsOverlaySync() {
-        self.clearDeferredEditableSettingsOverlayTask()
+        self.cancelDeferredEditableSettingsOverlayTask()
         self.deferredEditableSettingsOverlay = nil
     }
 
@@ -392,26 +392,41 @@ extension AppSession {
     }
 
     private func scheduleDeferredEditableSettingsOverlaySync() {
-        self.clearDeferredEditableSettingsOverlayTask()
+        self.cancelDeferredEditableSettingsOverlayTask()
         self.deferredEditableSettingsOverlayTask = Task { [weak self] in
             guard let self else { return }
+            await self.runDeferredEditableSettingsOverlaySyncLoop()
+        }
+    }
 
-            for _ in 0..<120 {
-                if Task.isCancelled { return }
-                guard self.isRuntimeRunning else { return }
-                if await self.applyDeferredEditableSettingsOverlayIfPossible() {
-                    self.clearDeferredEditableSettingsOverlayTask()
-                    return
-                }
-
-                do {
-                    try await Task.sleep(nanoseconds: 250_000_000)
-                } catch {
-                    return
-                }
+    private func runDeferredEditableSettingsOverlaySyncLoop() async {
+        for _ in 0..<120 {
+            guard self.shouldContinueDeferredEditableSettingsOverlaySyncLoop() else {
+                return
+            }
+            if await self.applyDeferredEditableSettingsOverlayIfPossible() {
+                self.finishDeferredEditableSettingsOverlayTask()
+                return
             }
 
-            self.clearDeferredEditableSettingsOverlayTask()
+            guard await self.sleepBeforeDeferredEditableSettingsOverlayRetry() else {
+                return
+            }
+        }
+
+        self.finishDeferredEditableSettingsOverlayTask()
+    }
+
+    private func shouldContinueDeferredEditableSettingsOverlaySyncLoop() -> Bool {
+        !Task.isCancelled && self.isRuntimeRunning
+    }
+
+    private func sleepBeforeDeferredEditableSettingsOverlayRetry() async -> Bool {
+        do {
+            try await Task.sleep(nanoseconds: 250_000_000)
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -435,8 +450,12 @@ extension AppSession {
         self.scheduleDeferredEditableSettingsOverlaySync()
     }
 
-    private func clearDeferredEditableSettingsOverlayTask() {
+    private func cancelDeferredEditableSettingsOverlayTask() {
         self.deferredEditableSettingsOverlayTask?.cancel()
+        self.deferredEditableSettingsOverlayTask = nil
+    }
+
+    private func finishDeferredEditableSettingsOverlayTask() {
         self.deferredEditableSettingsOverlayTask = nil
     }
 
