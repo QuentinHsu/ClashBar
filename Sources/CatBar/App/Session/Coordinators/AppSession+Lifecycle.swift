@@ -418,40 +418,15 @@ extension AppSession {
         settingsOverlay: EditableSettingsSnapshot,
         options: CoreBootstrapOptions) async
     {
-        statusText = "Running"
-        apiStatus = .healthy
-        resetTrafficPresentation()
-        ensureAPIClient()
-        startPolling()
-        await refreshFromAPI(includeSlowCalls: true)
-
-        await self.syncEditableSettingsOverlayForCoreBootstrap(
+        self.applyCoreBootstrapRunningState()
+        await self.performCoreBootstrapInitialRefresh()
+        await self.performCoreBootstrapOverlayAndTunPostflight(
             settingsOverlay,
             syncingKey: options.overlaySyncingKey)
-        await validateTunPermissionsOnStartup()
-        await ensureTunMixedStackOnStartupIfNeeded()
-        await self.verifyTunAfterOverlayIfNeeded(overlay: settingsOverlay)
-        enqueueProviderRefresh(trigger: options.providerTrigger)
-
-        if options.refreshProxyGroupsAfterBootstrap {
-            await self.refreshProxyGroupsAfterRestart()
-        }
-
-        // Keep startup responsive even when helper registration or system proxy reads are slow.
-        scheduleSystemProxyStartupPostflight(
-            refreshStatusBeforeOverlay: options.refreshSystemProxyBeforeOverlay,
-            refreshStatusAfterBootstrap: options.refreshSystemProxyAfterBootstrap)
-
-        defaults.set(configPath, forKey: lastSuccessfulConfigPathKey)
-        self.setPresentedStartupError(nil)
-        await self.restoreCoreFeaturesAfterStartupIfNeeded()
-        enforceNetworkManagedCorePolicyIfNeeded()
-
-        if options.autoTestGroupLatencies {
-            Task { [weak self] in
-                await self?.refreshAllGroupLatencies()
-            }
-        }
+        await self.performCoreBootstrapProviderRefresh(options)
+        self.scheduleSystemProxyBootstrapPostflight(options)
+        await self.finalizeCoreBootstrap(configPath: configPath)
+        self.scheduleBootstrapGroupLatencyRefreshIfNeeded(options)
     }
 
     private func overlayApplyingPendingCoreFeatureRecovery(_ overlay: EditableSettingsSnapshot)
@@ -486,24 +461,7 @@ extension AppSession {
         }
 
         guard transitionPlan.shouldDisableSystemProxyBeforeTransition else { return }
-        self.isProxySyncing = true
-        defer { self.isProxySyncing = false }
-
-        do {
-            try await self.applySystemProxy(enabled: false, host: self.controllerHost(), ports: .disabled)
-            self.isSystemProxyEnabled = false
-            self.systemProxyActiveDisplay = nil
-            self.clearSystemProxyOpenFailureHint()
-            self.appendLog(
-                level: "info",
-                message: self.tr("log.system_proxy.toggled", self.tr("log.system_proxy.disabled")))
-        } catch {
-            self.appendLog(
-                level: "error",
-                message: self.tr("log.system_proxy.toggle_failed", self.systemProxyErrorMessage(error)))
-            await self.refreshSystemProxyHelperStatus()
-            await self.refreshSystemProxyStatus()
-        }
+        await self.disableSystemProxyBeforeCoreTransition()
     }
 
     func seedCoreFeatureRecoveryFromPersistedQuitState() {
@@ -597,5 +555,88 @@ extension AppSession {
             await self.refreshSystemProxyStatus()
             return false
         }
+    }
+
+    private func applyCoreBootstrapRunningState() {
+        statusText = "Running"
+        apiStatus = .healthy
+        resetTrafficPresentation()
+        ensureAPIClient()
+        startPolling()
+    }
+
+    private func performCoreBootstrapInitialRefresh() async {
+        await refreshFromAPI(includeSlowCalls: true)
+    }
+
+    private func performCoreBootstrapOverlayAndTunPostflight(
+        _ settingsOverlay: EditableSettingsSnapshot,
+        syncingKey: String) async
+    {
+        await self.syncEditableSettingsOverlayForCoreBootstrap(
+            settingsOverlay,
+            syncingKey: syncingKey)
+        await validateTunPermissionsOnStartup()
+        await ensureTunMixedStackOnStartupIfNeeded()
+        await self.verifyTunAfterOverlayIfNeeded(overlay: settingsOverlay)
+    }
+
+    private func performCoreBootstrapProviderRefresh(_ options: CoreBootstrapOptions) async {
+        enqueueProviderRefresh(trigger: options.providerTrigger)
+
+        if options.refreshProxyGroupsAfterBootstrap {
+            await self.refreshProxyGroupsAfterRestart()
+        }
+    }
+
+    private func scheduleSystemProxyBootstrapPostflight(_ options: CoreBootstrapOptions) {
+        // Keep startup responsive even when helper registration or system proxy reads are slow.
+        scheduleSystemProxyStartupPostflight(
+            refreshStatusBeforeOverlay: options.refreshSystemProxyBeforeOverlay,
+            refreshStatusAfterBootstrap: options.refreshSystemProxyAfterBootstrap)
+    }
+
+    private func finalizeCoreBootstrap(configPath: String) async {
+        defaults.set(configPath, forKey: lastSuccessfulConfigPathKey)
+        self.setPresentedStartupError(nil)
+        await self.restoreCoreFeaturesAfterStartupIfNeeded()
+        enforceNetworkManagedCorePolicyIfNeeded()
+    }
+
+    private func scheduleBootstrapGroupLatencyRefreshIfNeeded(_ options: CoreBootstrapOptions) {
+        guard options.autoTestGroupLatencies else { return }
+
+        Task { [weak self] in
+            await self?.refreshAllGroupLatencies()
+        }
+    }
+
+    private func disableSystemProxyBeforeCoreTransition() async {
+        self.isProxySyncing = true
+        defer { self.isProxySyncing = false }
+
+        do {
+            try await self.applySystemProxy(enabled: false, host: self.controllerHost(), ports: .disabled)
+            self.completeSystemProxyDisableBeforeCoreTransition()
+        } catch {
+            await self.handleSystemProxyDisableBeforeCoreTransitionFailure(error)
+        }
+    }
+
+    private func completeSystemProxyDisableBeforeCoreTransition() {
+        self.isSystemProxyEnabled = false
+        self.systemProxyActiveDisplay = nil
+        self.clearSystemProxyOpenFailureHint()
+        self.appendLog(
+            level: "info",
+            message: self.tr("log.system_proxy.toggled", self.tr("log.system_proxy.disabled")))
+    }
+
+    private func handleSystemProxyDisableBeforeCoreTransitionFailure(_ error: Error) async {
+        self.appendLog(
+            level: "error",
+            message: self.tr("log.system_proxy.toggle_failed", self.systemProxyErrorMessage(error)))
+        await self.refreshSystemProxyHelperStatus()
+        await self.refreshSystemProxyStatus()
     }
 }
