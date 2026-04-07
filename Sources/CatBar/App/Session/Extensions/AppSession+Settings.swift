@@ -182,16 +182,20 @@ extension AppSession {
     func applyPendingAppLaunchSettingsOverlayIfNeeded(syncSystemProxyPort: Bool = true) async {
         guard let overlay = pendingAppLaunchOverlaySettings else { return }
         pendingAppLaunchOverlaySettings = nil
-        
+
+        let request = DeferredEditableSettingsOverlayRequest(
+            snapshot: overlay,
+            syncingKey: "app-launch-overlay",
+            syncSystemProxyPort: syncSystemProxyPort)
+
         if await self.isCoreAPIReachableForOverlaySync() {
             _ = await self.applyEditableSettingsOverlay(
-                overlay,
-                syncingKey: "app-launch-overlay",
+                request.snapshot,
+                syncingKey: request.syncingKey,
                 successMessage: "",
-                syncSystemProxyPort: syncSystemProxyPort)
+                syncSystemProxyPort: request.syncSystemProxyPort)
         } else {
-            self.deferredEditableSettingsOverlay = (snapshot: overlay, syncingKey: "app-launch-overlay")
-            self.scheduleDeferredEditableSettingsOverlaySync()
+            self.deferEditableSettingsOverlay(request)
         }
     }
 
@@ -199,11 +203,19 @@ extension AppSession {
         _ overlay: EditableSettingsSnapshot,
         syncingKey: String) async
     {
-        self.deferredEditableSettingsOverlay = (snapshot: overlay, syncingKey: syncingKey)
+        await self.beginDeferredEditableSettingsOverlayBootstrapSync(
+            DeferredEditableSettingsOverlayRequest(
+                snapshot: overlay,
+                syncingKey: syncingKey,
+                syncSystemProxyPort: true))
+    }
 
+    private func beginDeferredEditableSettingsOverlayBootstrapSync(
+        _ request: DeferredEditableSettingsOverlayRequest) async
+    {
+        self.deferredEditableSettingsOverlay = request
         if await self.applyDeferredEditableSettingsOverlayIfPossible() {
-            self.deferredEditableSettingsOverlayTask?.cancel()
-            self.deferredEditableSettingsOverlayTask = nil
+            self.clearDeferredEditableSettingsOverlayTask()
             return
         }
 
@@ -211,8 +223,7 @@ extension AppSession {
     }
 
     func cancelDeferredEditableSettingsOverlaySync() {
-        self.deferredEditableSettingsOverlayTask?.cancel()
-        self.deferredEditableSettingsOverlayTask = nil
+        self.clearDeferredEditableSettingsOverlayTask()
         self.deferredEditableSettingsOverlay = nil
     }
 
@@ -381,7 +392,7 @@ extension AppSession {
     }
 
     private func scheduleDeferredEditableSettingsOverlaySync() {
-        self.deferredEditableSettingsOverlayTask?.cancel()
+        self.clearDeferredEditableSettingsOverlayTask()
         self.deferredEditableSettingsOverlayTask = Task { [weak self] in
             guard let self else { return }
 
@@ -389,7 +400,7 @@ extension AppSession {
                 if Task.isCancelled { return }
                 guard self.isRuntimeRunning else { return }
                 if await self.applyDeferredEditableSettingsOverlayIfPossible() {
-                    self.deferredEditableSettingsOverlayTask = nil
+                    self.clearDeferredEditableSettingsOverlayTask()
                     return
                 }
 
@@ -400,7 +411,7 @@ extension AppSession {
                 }
             }
 
-            self.deferredEditableSettingsOverlayTask = nil
+            self.clearDeferredEditableSettingsOverlayTask()
         }
     }
 
@@ -411,11 +422,22 @@ extension AppSession {
         let applied = await self.applyEditableSettingsOverlay(
             deferred.snapshot,
             syncingKey: deferred.syncingKey,
-            successMessage: "")
+            successMessage: "",
+            syncSystemProxyPort: deferred.syncSystemProxyPort)
         if applied {
             self.deferredEditableSettingsOverlay = nil
         }
         return applied
+    }
+
+    private func deferEditableSettingsOverlay(_ request: DeferredEditableSettingsOverlayRequest) {
+        self.deferredEditableSettingsOverlay = request
+        self.scheduleDeferredEditableSettingsOverlaySync()
+    }
+
+    private func clearDeferredEditableSettingsOverlayTask() {
+        self.deferredEditableSettingsOverlayTask?.cancel()
+        self.deferredEditableSettingsOverlayTask = nil
     }
 
     private func isCoreAPIReachableForOverlaySync() async -> Bool {

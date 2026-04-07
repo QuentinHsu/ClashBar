@@ -956,7 +956,7 @@ final class AppSession: ObservableObject {
         get { self.lifecycleCoordinationState.pendingCoreFeatureRecoveryState }
         set { self.lifecycleCoordinationState.pendingCoreFeatureRecoveryState = newValue }
     }
-    var deferredEditableSettingsOverlay: (snapshot: EditableSettingsSnapshot, syncingKey: String)?
+    var deferredEditableSettingsOverlay: DeferredEditableSettingsOverlayRequest?
     var remoteConfigSources: [String: String] = [:]
     var externalControllerWarningKeys: Set<String> = []
     let streamJSONDecoder = JSONDecoder()

@@ -828,6 +828,12 @@ extension EditableSettingsSnapshot {
     }
 }
 
+struct DeferredEditableSettingsOverlayRequest: Equatable {
+    let snapshot: EditableSettingsSnapshot
+    let syncingKey: String
+    let syncSystemProxyPort: Bool
+}
+
 struct SystemProxyPorts: Equatable {
     let httpPort: Int?
     let httpsPort: Int?
