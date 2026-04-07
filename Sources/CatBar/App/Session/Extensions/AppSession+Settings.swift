@@ -10,6 +10,10 @@ extension AppSession {
         ResolveEditableSettingsSyncPlanUseCase()
     }
 
+    private var resolveSystemProxyPortSyncPlanUseCase: ResolveSystemProxyPortSyncPlanUseCase {
+        ResolveSystemProxyPortSyncPlanUseCase()
+    }
+
     private var buildPortPatchBodyUseCase: BuildPortPatchBodyUseCase {
         BuildPortPatchBodyUseCase()
     }
@@ -529,16 +533,30 @@ extension AppSession {
 
         do {
             let target = try self.resolveSystemProxyTargetFromState()
-            try await applySystemProxy(enabled: true, host: target.host, ports: target.ports)
-            systemProxyActiveDisplay = buildSystemProxyDisplayString(host: target.host, ports: target.ports)
-            appendLog(level: "info", message: tr("log.system_proxy.port_synced", target.ports.primaryPort ?? 0))
-
-            if let previousPorts, previousPorts != target.ports {
-                await closeAllConnections()
-            }
+            let syncPlan = self.resolveSystemProxyPortSyncPlanUseCase.execute(
+                previousPorts: previousPorts,
+                currentPorts: target.ports)
+            try await self.applySystemProxyPortSyncTarget(
+                host: target.host,
+                ports: target.ports,
+                plan: syncPlan)
         } catch {
             appendLog(level: "error", message: tr("log.system_proxy.port_sync_failed", systemProxyErrorMessage(error)))
             await self.refreshSystemProxyHelperStatus()
+        }
+    }
+
+    private func applySystemProxyPortSyncTarget(
+        host: String,
+        ports: SystemProxyPorts,
+        plan: SystemProxyPortSyncPlan) async throws
+    {
+        try await applySystemProxy(enabled: true, host: host, ports: ports)
+        systemProxyActiveDisplay = buildSystemProxyDisplayString(host: host, ports: ports)
+        appendLog(level: "info", message: tr("log.system_proxy.port_synced", ports.primaryPort ?? 0))
+
+        if plan.shouldCloseConnections {
+            await closeAllConnections()
         }
     }
 
