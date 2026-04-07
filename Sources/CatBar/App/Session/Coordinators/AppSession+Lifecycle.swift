@@ -45,6 +45,11 @@ extension AppSession {
         let launchController: String
     }
 
+    private struct CoreLaunchPlan {
+        let launchContext: CoreLaunchContext
+        let settingsOverlay: EditableSettingsSnapshot
+    }
+
     private func performExclusiveCoreAction(_ action: CoreActionState, operation: () async -> Void) async {
         guard self.beginPresentedCoreAction(action) else { return }
         defer { self.endPresentedCoreAction() }
@@ -143,36 +148,12 @@ extension AppSession {
             if trigger == .manual {
                 shouldResumeCoreAfterNetworkRecovery = false
             }
-            var settingsOverlay = currentEditableSettingsSnapshot()
-            settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(settingsOverlay)
-            preserveLocalSettingsOnNextSync = true
             do {
-                settingsOverlay = try await prepareTunOverlayForCoreStartup(settingsOverlay)
-
-                guard let launchContext = await self.prepareCoreLaunchContext(
-                    onMissingConfig: { self.handleMissingStartCoreConfig(trigger: trigger) },
-                    onValidationFailure: { configPath in
-                        self.handleStartCoreValidationFailure(configPath: configPath, trigger: trigger)
-                    })
-                else {
+                guard let plan = try await self.prepareStartCoreLaunchPlan(trigger: trigger) else {
                     return
                 }
 
-                statusText = "Starting"
-                _ = try await self.startCoreUseCase.execute(
-                    configPath: launchContext.configPath,
-                    controller: launchContext.launchController)
-
-                await self.completeCoreBootstrap(
-                    configPath: launchContext.configPath,
-                    settingsOverlay: settingsOverlay,
-                    options: CoreBootstrapOptions(
-                        overlaySyncingKey: "start-overlay",
-                        providerTrigger: .start,
-                        refreshProxyGroupsAfterBootstrap: false,
-                        refreshSystemProxyBeforeOverlay: true,
-                        refreshSystemProxyAfterBootstrap: false,
-                        autoTestGroupLatencies: true))
+                try await self.executeStartCoreLaunchPlan(plan)
             } catch {
                 self.handleStartCoreExecutionFailure(error, trigger: trigger)
             }
@@ -201,33 +182,12 @@ extension AppSession {
     func restartCore(trigger: ProviderRefreshTrigger = .restart) async {
         guard !self.isRemoteTarget else { return }
         await self.performExclusiveCoreAction(.restarting) {
-            preserveLocalSettingsOnNextSync = true
-            cancelProviderRefresh(reason: "restart requested")
             do {
-                guard let launchContext = await self.prepareCoreLaunchContext(
-                    onMissingConfig: { self.handleMissingRestartCoreConfig() },
-                    onValidationFailure: { _ in preserveLocalSettingsOnNextSync = false })
-                else {
+                guard let plan = await self.prepareRestartCoreLaunchPlan() else {
                     return
                 }
 
-                let recoverySnapshotBeforeRestart = self.currentCoreFeatureRecoverySnapshot()
-                await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
-                    fallbackRecovery: recoverySnapshotBeforeRestart)
-                let settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(currentEditableSettingsSnapshot())
-                _ = try await self.restartCoreUseCase.execute(
-                    configPath: launchContext.configPath,
-                    controller: launchContext.launchController)
-                await self.completeCoreBootstrap(
-                    configPath: launchContext.configPath,
-                    settingsOverlay: settingsOverlay,
-                    options: CoreBootstrapOptions(
-                        overlaySyncingKey: "restart-overlay",
-                        providerTrigger: trigger,
-                        refreshProxyGroupsAfterBootstrap: true,
-                        refreshSystemProxyBeforeOverlay: false,
-                        refreshSystemProxyAfterBootstrap: true,
-                        autoTestGroupLatencies: false))
+                try await self.executeRestartCoreLaunchPlan(plan, trigger: trigger)
             } catch {
                 self.handleRestartCoreExecutionFailure(error)
             }
@@ -418,6 +378,81 @@ extension AppSession {
     func attemptAutoStartIfNeeded() async {
         guard self.beginLifecycleAutoStartAttempt() else { return }
         await self.startCore(trigger: .auto)
+    }
+
+    private func prepareStartCoreLaunchPlan(trigger: StartTrigger) async throws -> CoreLaunchPlan? {
+        preserveLocalSettingsOnNextSync = true
+        var settingsOverlay = currentEditableSettingsSnapshot()
+        settingsOverlay = self.overlayApplyingPendingCoreFeatureRecovery(settingsOverlay)
+        settingsOverlay = try await prepareTunOverlayForCoreStartup(settingsOverlay)
+
+        guard let launchContext = await self.prepareCoreLaunchContext(
+            onMissingConfig: { self.handleMissingStartCoreConfig(trigger: trigger) },
+            onValidationFailure: { configPath in
+                self.handleStartCoreValidationFailure(configPath: configPath, trigger: trigger)
+            })
+        else {
+            return nil
+        }
+
+        return CoreLaunchPlan(launchContext: launchContext, settingsOverlay: settingsOverlay)
+    }
+
+    private func executeStartCoreLaunchPlan(_ plan: CoreLaunchPlan) async throws {
+        statusText = "Starting"
+        _ = try await self.startCoreUseCase.execute(
+            configPath: plan.launchContext.configPath,
+            controller: plan.launchContext.launchController)
+
+        await self.completeCoreBootstrap(
+            configPath: plan.launchContext.configPath,
+            settingsOverlay: plan.settingsOverlay,
+            options: CoreBootstrapOptions(
+                overlaySyncingKey: "start-overlay",
+                providerTrigger: .start,
+                refreshProxyGroupsAfterBootstrap: false,
+                refreshSystemProxyBeforeOverlay: true,
+                refreshSystemProxyAfterBootstrap: false,
+                autoTestGroupLatencies: true))
+    }
+
+    private func prepareRestartCoreLaunchPlan() async -> CoreLaunchPlan? {
+        preserveLocalSettingsOnNextSync = true
+        cancelProviderRefresh(reason: "restart requested")
+
+        guard let launchContext = await self.prepareCoreLaunchContext(
+            onMissingConfig: { self.handleMissingRestartCoreConfig() },
+            onValidationFailure: { _ in preserveLocalSettingsOnNextSync = false })
+        else {
+            return nil
+        }
+
+        let recoverySnapshotBeforeRestart = self.currentCoreFeatureRecoverySnapshot()
+        await self.prepareCoreFeatureRecoveryBeforeCoreTransition(
+            fallbackRecovery: recoverySnapshotBeforeRestart)
+
+        return CoreLaunchPlan(
+            launchContext: launchContext,
+            settingsOverlay: self.overlayApplyingPendingCoreFeatureRecovery(currentEditableSettingsSnapshot()))
+    }
+
+    private func executeRestartCoreLaunchPlan(
+        _ plan: CoreLaunchPlan,
+        trigger: ProviderRefreshTrigger) async throws
+    {
+        _ = try await self.restartCoreUseCase.execute(
+            configPath: plan.launchContext.configPath,
+            controller: plan.launchContext.launchController)
+        await self.completeCoreBootstrap(
+            configPath: plan.launchContext.configPath,
+            settingsOverlay: plan.settingsOverlay,
+            options: CoreBootstrapOptions(
+                overlaySyncingKey: "restart-overlay",
+                providerTrigger: trigger,
+                refreshProxyGroupsAfterBootstrap: true,
+                refreshSystemProxyBeforeOverlay: false,
+                refreshSystemProxyAfterBootstrap: true,
+                autoTestGroupLatencies: false))
     }
 
     private func completeCoreBootstrap(
