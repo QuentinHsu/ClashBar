@@ -4,6 +4,10 @@ import UniformTypeIdentifiers
 
 @MainActor
 extension AppSession {
+    private var resolveConfigMutationFollowUpUseCase: ResolveConfigMutationFollowUpUseCase {
+        ResolveConfigMutationFollowUpUseCase()
+    }
+
     private var resolveRemoteConfigImportRequestUseCase: ResolveRemoteConfigImportRequestUseCase {
         ResolveRemoteConfigImportRequestUseCase()
     }
@@ -399,9 +403,7 @@ extension AppSession {
         let expectedTunEnabled = isTunEnabled
 
         do {
-            ensureAPIClient()
-            try await self.reloadRuntimeConfigUseCase().execute(force: false)
-            try await self.restoreTunAfterConfigReloadIfNeeded(expectedEnabled: expectedTunEnabled)
+            try await self.executeConfigReload(expectedTunEnabled: expectedTunEnabled)
             appendLog(level: "info", message: tr("log.action.success", actionName))
         } catch {
             appendLog(level: "error", message: tr("log.action.failed", actionName, error.localizedDescription))
@@ -443,12 +445,6 @@ extension AppSession {
         selectedConfigName = selected.lastPathComponent
         defaults.set(selected.lastPathComponent, forKey: selectedConfigKey)
         return selected.path
-    }
-
-    private func shouldAutoReloadCurrentConfig(updatedFileNames: Set<String>) -> Bool {
-        guard !updatedFileNames.isEmpty else { return false }
-        guard isRuntimeRunning else { return false }
-        return updatedFileNames.contains(selectedConfigName)
     }
 
     private func writeConfigData(_ data: Data, to targetURL: URL) throws {
@@ -607,9 +603,19 @@ extension AppSession {
         }
     }
 
+    private func executeConfigReload(expectedTunEnabled: Bool) async throws {
+        ensureAPIClient()
+        try await self.reloadRuntimeConfigUseCase().execute(force: false)
+        try await self.restoreTunAfterConfigReloadIfNeeded(expectedEnabled: expectedTunEnabled)
+    }
+
     private func applyConfigMutationFollowUp(updatedFileNames: Set<String>) async {
+        let followUpPlan = self.resolveConfigMutationFollowUpUseCase.execute(
+            updatedFileNames: updatedFileNames,
+            selectedConfigName: selectedConfigName,
+            isRuntimeRunning: isRuntimeRunning)
         self.refreshConfigStateAfterMutation()
-        if self.shouldAutoReloadCurrentConfig(updatedFileNames: updatedFileNames) {
+        if followUpPlan.shouldReloadCurrentConfig {
             await self.reloadConfig()
         }
     }
