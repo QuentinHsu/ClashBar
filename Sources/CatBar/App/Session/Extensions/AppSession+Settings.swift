@@ -283,52 +283,101 @@ extension AppSession {
         successMessage: String,
         syncSystemProxyPort: Bool = true) async -> Bool
     {
+        self.prepareSettingsPatchRequest(syncingKey: syncingKey)
+        defer { settingsSyncingKey = nil }
+
+        let shouldSyncSystemProxyPort = self.shouldSyncSystemProxyPort(
+            for: body,
+            requested: syncSystemProxyPort)
+        let previousSystemProxyPorts =
+            await previousSystemProxyPortsForSyncIfNeeded(shouldSync: shouldSyncSystemProxyPort)
+        let patchKeysDescription = self.patchKeysDescription(for: body)
+
+        do {
+            try await self.executeRuntimeConfigPatch(body, patchKeysDescription: patchKeysDescription)
+            await self.handleSettingsPatchSuccess(
+                successMessage: successMessage,
+                shouldSync: shouldSyncSystemProxyPort,
+                previousPorts: previousSystemProxyPorts)
+            return true
+        } catch {
+            return await self.handleSettingsPatchFailure(
+                error,
+                patchKeysDescription: patchKeysDescription,
+                syncingKey: syncingKey)
+        }
+    }
+
+    private func isOverlaySyncingKey(_ syncingKey: String) -> Bool {
+        syncingKey.hasSuffix("-overlay")
+    }
+
+    private func prepareSettingsPatchRequest(syncingKey: String) {
         self.cancelProxyPortsAutoSave()
         settingsFeedbackClearTask?.cancel()
         settingsFeedbackClearTask = nil
         settingsSyncingKey = syncingKey
         settingsErrorMessage = nil
         settingsSavedMessage = nil
-        defer { settingsSyncingKey = nil }
-        let shouldSyncSystemProxyPort = syncSystemProxyPort && !self.isRemoteTarget && body.keys.contains { key in
-            key == "mixed-port" || key == "port" || key == "socks-port"
-        }
-        let previousSystemProxyPorts =
-            await previousSystemProxyPortsForSyncIfNeeded(shouldSync: shouldSyncSystemProxyPort)
-
-        let patchKeysDescription = body.keys.sorted().joined(separator: ", ")
-        do {
-            ensureAPIClient()
-            appendLog(level: "info", message: "PATCH /configs [\(patchKeysDescription)]")
-            try await self.patchRuntimeConfigUseCase().execute(body: body.mapValues(\.jsonValue))
-            appendLog(level: "info", message: "PATCH /configs succeeded [\(patchKeysDescription)]")
-            await refreshFromAPI(includeSlowCalls: false)
-            await self.reconcileEditableSettingsWithRuntimeConfig()
-            settingsSavedMessage = successMessage
-            self.scheduleSettingsFeedbackAutoClearIfNeeded(message: successMessage)
-            await self.syncSystemProxyPortIfNeeded(
-                shouldSync: shouldSyncSystemProxyPort,
-                previousPorts: previousSystemProxyPorts)
-            return true
-        } catch {
-            appendLog(
-                level: "error",
-                message: "PATCH /configs failed [\(patchKeysDescription)]: \(error.localizedDescription)")
-            let message = tr("app.settings.error.save_failed", syncingKey, error.localizedDescription)
-            if self.isOverlaySyncingKey(syncingKey) {
-                appendLog(level: "error", message: message)
-            } else {
-                settingsErrorMessage = message
-            }
-            settingsSavedMessage = nil
-            await refreshFromAPI(includeSlowCalls: false)
-            await self.reconcileEditableSettingsWithRuntimeConfig()
-            return false
-        }
     }
 
-    private func isOverlaySyncingKey(_ syncingKey: String) -> Bool {
-        syncingKey.hasSuffix("-overlay")
+    private func shouldSyncSystemProxyPort(
+        for body: [String: ConfigPatchValue],
+        requested: Bool) -> Bool
+    {
+        requested
+            && !self.isRemoteTarget
+            && body.keys.contains { key in
+                key == "mixed-port" || key == "port" || key == "socks-port"
+            }
+    }
+
+    private func patchKeysDescription(for body: [String: ConfigPatchValue]) -> String {
+        body.keys.sorted().joined(separator: ", ")
+    }
+
+    private func executeRuntimeConfigPatch(
+        _ body: [String: ConfigPatchValue],
+        patchKeysDescription: String) async throws
+    {
+        ensureAPIClient()
+        appendLog(level: "info", message: "PATCH /configs [\(patchKeysDescription)]")
+        try await self.patchRuntimeConfigUseCase().execute(body: body.mapValues(\.jsonValue))
+        appendLog(level: "info", message: "PATCH /configs succeeded [\(patchKeysDescription)]")
+    }
+
+    private func handleSettingsPatchSuccess(
+        successMessage: String,
+        shouldSync: Bool,
+        previousPorts: SystemProxyPorts?) async
+    {
+        await refreshFromAPI(includeSlowCalls: false)
+        await self.reconcileEditableSettingsWithRuntimeConfig()
+        settingsSavedMessage = successMessage
+        self.scheduleSettingsFeedbackAutoClearIfNeeded(message: successMessage)
+        await self.syncSystemProxyPortIfNeeded(
+            shouldSync: shouldSync,
+            previousPorts: previousPorts)
+    }
+
+    private func handleSettingsPatchFailure(
+        _ error: Error,
+        patchKeysDescription: String,
+        syncingKey: String) async -> Bool
+    {
+        appendLog(
+            level: "error",
+            message: "PATCH /configs failed [\(patchKeysDescription)]: \(error.localizedDescription)")
+        let message = tr("app.settings.error.save_failed", syncingKey, error.localizedDescription)
+        if self.isOverlaySyncingKey(syncingKey) {
+            appendLog(level: "error", message: message)
+        } else {
+            settingsErrorMessage = message
+        }
+        settingsSavedMessage = nil
+        await refreshFromAPI(includeSlowCalls: false)
+        await self.reconcileEditableSettingsWithRuntimeConfig()
+        return false
     }
 
     private func scheduleDeferredEditableSettingsOverlaySync() {
