@@ -4,6 +4,10 @@ import UniformTypeIdentifiers
 
 @MainActor
 extension AppSession {
+    private var resolveRemoteConfigImportRequestUseCase: ResolveRemoteConfigImportRequestUseCase {
+        ResolveRemoteConfigImportRequestUseCase()
+    }
+
     private var resolveConfigSelectionTransitionUseCase: ResolveConfigSelectionTransitionUseCase {
         ResolveConfigSelectionTransitionUseCase()
     }
@@ -223,25 +227,20 @@ extension AppSession {
         guard let configDirectory = ensureConfigDirectoryAvailable() else { return }
         guard let input = promptRemoteConfigImportInput() else { return }
 
-        let urlText = input.urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let remoteURL = URL(string: urlText), isSupportedRemoteConfigURL(remoteURL) else {
-            let message = tr("log.config.remote.invalid_url", urlText)
-            appendLog(level: "error", message: message)
-            self.presentRemoteConfigImportResultAlert(success: false, message: message)
-            return
-        }
-
-        let fallbackName = self.inferredRemoteConfigFileName(from: remoteURL)
-        guard let fileName = normalizedConfigFileName(input.fileName, fallback: fallbackName) else {
-            let message = tr("log.config.import.invalid_filename", input.fileName)
-            appendLog(level: "error", message: message)
-            self.presentRemoteConfigImportResultAlert(success: false, message: message)
+        let requestResult = self.resolveRemoteConfigImportRequestUseCase.execute(
+            urlString: input.urlString,
+            fileNameInput: input.fileName,
+            isSupportedRemoteConfigURL: self.isSupportedRemoteConfigURL,
+            inferredRemoteConfigFileName: self.inferredRemoteConfigFileName,
+            normalizedConfigFileName: self.normalizedConfigFileName)
+        guard case let .success(request) = requestResult else {
+            self.handleRemoteConfigImportRequestFailure(requestResult)
             return
         }
 
         guard let destination = self.prepareConfigImportDestination(
             configDirectory: configDirectory,
-            fileName: fileName)
+            fileName: request.fileName)
         else {
             return
         }
@@ -249,11 +248,11 @@ extension AppSession {
         do {
             let userAgent = await remoteSubscriptionUserAgent()
             try await self.replaceRemoteConfigFile(
-                from: remoteURL,
+                from: request.remoteURL,
                 userAgent: userAgent,
                 targetURL: destination.targetURL)
 
-            self.updateRemoteConfigSource(for: destination.fileName, urlString: remoteURL.absoluteString)
+            self.updateRemoteConfigSource(for: destination.fileName, urlString: request.remoteURL.absoluteString)
             let message = tr("log.config.import_remote.success", destination.fileName)
             appendLog(level: "info", message: message)
 
@@ -479,6 +478,23 @@ extension AppSession {
         self.prepareModalWindowPresentation()
         self.configureModalWindow(alert.window)
         alert.runModal()
+    }
+
+    private func handleRemoteConfigImportRequestFailure(
+        _ result: Result<RemoteConfigImportRequest, ResolveRemoteConfigImportRequestError>)
+    {
+        guard case let .failure(error) = result else { return }
+
+        let message: String
+        switch error {
+        case let .invalidURL(input):
+            message = tr("log.config.remote.invalid_url", input)
+        case let .invalidFileName(input):
+            message = tr("log.config.import.invalid_filename", input)
+        }
+
+        appendLog(level: "error", message: message)
+        self.presentRemoteConfigImportResultAlert(success: false, message: message)
     }
 
     private struct RemoteConfigImportInput {
