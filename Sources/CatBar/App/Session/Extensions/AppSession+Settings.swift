@@ -183,17 +183,13 @@ extension AppSession {
         guard let overlay = pendingAppLaunchOverlaySettings else { return }
         pendingAppLaunchOverlaySettings = nil
 
-        let request = DeferredEditableSettingsOverlayRequest(
+        let request = self.makeDeferredEditableSettingsOverlayRequest(
             snapshot: overlay,
             syncingKey: "app-launch-overlay",
             syncSystemProxyPort: syncSystemProxyPort)
 
         if await self.isCoreAPIReachableForOverlaySync() {
-            _ = await self.applyEditableSettingsOverlay(
-                request.snapshot,
-                syncingKey: request.syncingKey,
-                successMessage: "",
-                syncSystemProxyPort: request.syncSystemProxyPort)
+            _ = await self.executeEditableSettingsOverlayRequest(request, successMessage: "")
         } else {
             self.deferEditableSettingsOverlay(request)
         }
@@ -204,7 +200,7 @@ extension AppSession {
         syncingKey: String) async
     {
         await self.beginDeferredEditableSettingsOverlayBootstrapSync(
-            DeferredEditableSettingsOverlayRequest(
+            self.makeDeferredEditableSettingsOverlayRequest(
                 snapshot: overlay,
                 syncingKey: syncingKey,
                 syncSystemProxyPort: true))
@@ -234,26 +230,7 @@ extension AppSession {
         successMessage: String,
         syncSystemProxyPort: Bool = true) async -> Bool
     {
-        let fallback = self.lastSyncedEditableSettings
-        let hasConfiguredTunStack = overlay.tunEnabled ? await self.selectedConfigDeclaresTunStack() : true
-
-        let body: [String: ConfigPatchValue]
-        do {
-            body = try self.buildEditableSettingsOverlayPatchBodyUseCase.execute(
-                overlay: overlay,
-                fallback: fallback,
-                hasConfiguredTunStack: hasConfiguredTunStack)
-        } catch let BuildEditableSettingsOverlayPatchBodyError.invalidLogLevel(resolvedLogLevel) {
-            settingsErrorMessage = tr("app.settings.error.overlay_invalid_log_level", resolvedLogLevel)
-            settingsSavedMessage = nil
-            return false
-        } catch let BuildEditableSettingsOverlayPatchBodyError.invalidPort(key) {
-            settingsErrorMessage = tr("app.settings.error.overlay_port_range", key)
-            settingsSavedMessage = nil
-            return false
-        } catch {
-            settingsErrorMessage = tr("app.settings.error.overlay_port_range", "unknown")
-            settingsSavedMessage = nil
+        guard let body = await self.editableSettingsOverlayPatchBody(for: overlay) else {
             return false
         }
 
@@ -434,11 +411,7 @@ extension AppSession {
         guard let deferred = self.deferredEditableSettingsOverlay else { return true }
         guard await self.isCoreAPIReachableForOverlaySync() else { return false }
 
-        let applied = await self.applyEditableSettingsOverlay(
-            deferred.snapshot,
-            syncingKey: deferred.syncingKey,
-            successMessage: "",
-            syncSystemProxyPort: deferred.syncSystemProxyPort)
+        let applied = await self.executeEditableSettingsOverlayRequest(deferred, successMessage: "")
         if applied {
             self.deferredEditableSettingsOverlay = nil
         }
@@ -457,6 +430,54 @@ extension AppSession {
 
     private func finishDeferredEditableSettingsOverlayTask() {
         self.deferredEditableSettingsOverlayTask = nil
+    }
+
+    private func makeDeferredEditableSettingsOverlayRequest(
+        snapshot: EditableSettingsSnapshot,
+        syncingKey: String,
+        syncSystemProxyPort: Bool) -> DeferredEditableSettingsOverlayRequest
+    {
+        DeferredEditableSettingsOverlayRequest(
+            snapshot: snapshot,
+            syncingKey: syncingKey,
+            syncSystemProxyPort: syncSystemProxyPort)
+    }
+
+    private func executeEditableSettingsOverlayRequest(
+        _ request: DeferredEditableSettingsOverlayRequest,
+        successMessage: String) async -> Bool
+    {
+        await self.applyEditableSettingsOverlay(
+            request.snapshot,
+            syncingKey: request.syncingKey,
+            successMessage: successMessage,
+            syncSystemProxyPort: request.syncSystemProxyPort)
+    }
+
+    private func editableSettingsOverlayPatchBody(
+        for overlay: EditableSettingsSnapshot) async -> [String: ConfigPatchValue]?
+    {
+        let fallback = self.lastSyncedEditableSettings
+        let hasConfiguredTunStack = overlay.tunEnabled ? await self.selectedConfigDeclaresTunStack() : true
+
+        do {
+            return try self.buildEditableSettingsOverlayPatchBodyUseCase.execute(
+                overlay: overlay,
+                fallback: fallback,
+                hasConfiguredTunStack: hasConfiguredTunStack)
+        } catch let BuildEditableSettingsOverlayPatchBodyError.invalidLogLevel(resolvedLogLevel) {
+            settingsErrorMessage = tr("app.settings.error.overlay_invalid_log_level", resolvedLogLevel)
+            settingsSavedMessage = nil
+            return nil
+        } catch let BuildEditableSettingsOverlayPatchBodyError.invalidPort(key) {
+            settingsErrorMessage = tr("app.settings.error.overlay_port_range", key)
+            settingsSavedMessage = nil
+            return nil
+        } catch {
+            settingsErrorMessage = tr("app.settings.error.overlay_port_range", "unknown")
+            settingsSavedMessage = nil
+            return nil
+        }
     }
 
     private func isCoreAPIReachableForOverlaySync() async -> Bool {
