@@ -7,8 +7,8 @@ extension AppSession {
         ResolvePrimaryCoreActionUseCase()
     }
 
-    private var startCoreFailureResolver: StartCoreFailureResolver {
-        StartCoreFailureResolver()
+    private var resolveCoreLaunchFailureFeedbackUseCase: ResolveCoreLaunchFailureFeedbackUseCase {
+        ResolveCoreLaunchFailureFeedbackUseCase()
     }
 
     private var validateCoreConfigUseCase: ValidateCoreConfigUseCase {
@@ -64,7 +64,27 @@ extension AppSession {
         await operation()
     }
 
-    private func applyStartCoreFailureResolution(_ resolution: StartCoreFailureResolution) {
+    private func applyCoreLaunchFailureFeedback(_ feedback: CoreLaunchFailureFeedback) {
+        if feedback.shouldResetPreserveLocalSettings {
+            preserveLocalSettingsOnNextSync = false
+        }
+        if let logLevel = feedback.logLevel, let logMessage = feedback.logMessage {
+            appendLog(level: logLevel, message: logMessage)
+        }
+        if let alertTitle = feedback.alertTitle,
+           let alertMessage = feedback.alertMessage,
+           let alertDedupeKey = feedback.alertDedupeKey
+        {
+            self.presentCoreFailureAlert(
+                title: alertTitle,
+                message: alertMessage,
+                dedupeKey: alertDedupeKey)
+        }
+        self.applyStartCoreFailureResolutionIfNeeded(feedback.startFailureResolution)
+    }
+
+    private func applyStartCoreFailureResolutionIfNeeded(_ resolution: StartCoreFailureResolution?) {
+        guard let resolution else { return }
         if let statusText = resolution.statusText {
             self.statusText = statusText
         }
@@ -76,59 +96,54 @@ extension AppSession {
 
     private func handleMissingStartCoreConfig(trigger: StartTrigger) {
         let message = tr("log.start.no_config")
-        appendLog(level: "error", message: message)
-        self.presentCoreFailureAlert(
-            title: self.tr("app.core.alert.start_failed.title"),
-            message: message,
-            dedupeKey: "core-start-failed")
-        self.applyStartCoreFailureResolution(
-            self.startCoreFailureResolver.resolve(
-                trigger: trigger,
-                kind: .missingConfig(message: message)))
+        self.applyCoreLaunchFailureFeedback(
+            self.resolveCoreLaunchFailureFeedbackUseCase.execute(
+                action: .start(trigger: trigger),
+                kind: .missingConfig(message: message),
+                startAlertTitle: self.tr("app.core.alert.start_failed.title"),
+                restartAlertTitle: self.tr("app.core.alert.restart_failed.title")))
     }
 
     private func handleStartCoreValidationFailure(configPath: String, trigger: StartTrigger) {
-        preserveLocalSettingsOnNextSync = false
         let startupMessage = tr("app.config.validation_failed.startup", URL(fileURLWithPath: configPath).lastPathComponent)
-        self.applyStartCoreFailureResolution(
-            self.startCoreFailureResolver.resolve(
-                trigger: trigger,
-                kind: .validationFailed(startupMessage: startupMessage)))
+        self.applyCoreLaunchFailureFeedback(
+            self.resolveCoreLaunchFailureFeedbackUseCase.execute(
+                action: .start(trigger: trigger),
+                kind: .validationFailed(startupMessage: startupMessage),
+                startAlertTitle: self.tr("app.core.alert.start_failed.title"),
+                restartAlertTitle: self.tr("app.core.alert.restart_failed.title")))
     }
 
     private func handleStartCoreExecutionFailure(_ error: Error, trigger: StartTrigger) {
         let errorMessage = self.coreErrorMessage(error)
-        preserveLocalSettingsOnNextSync = false
         let message = tr("log.start.failed", errorMessage)
-        appendLog(level: "error", message: message)
-        self.presentCoreFailureAlert(
-            title: self.tr("app.core.alert.start_failed.title"),
-            message: message,
-            dedupeKey: "core-start-failed")
-        self.applyStartCoreFailureResolution(
-            self.startCoreFailureResolver.resolve(
-                trigger: trigger,
-                kind: .executionFailed(message: message)))
+        self.applyCoreLaunchFailureFeedback(
+            self.resolveCoreLaunchFailureFeedbackUseCase.execute(
+                action: .start(trigger: trigger),
+                kind: .executionFailed(message: message),
+                startAlertTitle: self.tr("app.core.alert.start_failed.title"),
+                restartAlertTitle: self.tr("app.core.alert.restart_failed.title")))
     }
 
     private func handleMissingRestartCoreConfig() {
         let message = tr("log.start.no_config")
-        appendLog(level: "error", message: message)
-        self.presentCoreFailureAlert(
-            title: self.tr("app.core.alert.restart_failed.title"),
-            message: message,
-            dedupeKey: "core-restart-failed")
+        self.applyCoreLaunchFailureFeedback(
+            self.resolveCoreLaunchFailureFeedbackUseCase.execute(
+                action: .restart,
+                kind: .missingConfig(message: message),
+                startAlertTitle: self.tr("app.core.alert.start_failed.title"),
+                restartAlertTitle: self.tr("app.core.alert.restart_failed.title")))
     }
 
     private func handleRestartCoreExecutionFailure(_ error: Error) {
         let errorMessage = self.coreErrorMessage(error)
-        preserveLocalSettingsOnNextSync = false
         let message = tr("log.restart.failed", errorMessage)
-        appendLog(level: "error", message: message)
-        self.presentCoreFailureAlert(
-            title: self.tr("app.core.alert.restart_failed.title"),
-            message: message,
-            dedupeKey: "core-restart-failed")
+        self.applyCoreLaunchFailureFeedback(
+            self.resolveCoreLaunchFailureFeedbackUseCase.execute(
+                action: .restart,
+                kind: .executionFailed(message: message),
+                startAlertTitle: self.tr("app.core.alert.start_failed.title"),
+                restartAlertTitle: self.tr("app.core.alert.restart_failed.title")))
     }
 
     private func prepareCoreLaunchContext(
