@@ -8,6 +8,10 @@ extension AppSession {
         ResolveConfigMutationFollowUpUseCase()
     }
 
+    private var resolveRemoteConfigRefreshCompletionStateUseCase: ResolveRemoteConfigRefreshCompletionStateUseCase {
+        ResolveRemoteConfigRefreshCompletionStateUseCase()
+    }
+
     private var resolveRemoteConfigMenuStatesUseCase: ResolveRemoteConfigMenuStatesUseCase {
         ResolveRemoteConfigMenuStatesUseCase()
     }
@@ -363,12 +367,16 @@ extension AppSession {
 
         self.pruneRemoteConfigSourcesIfNeeded()
         self.setRemoteConfigMenuState(for: fileName, phase: .refreshing)
+        let currentRefreshingState = self.remoteConfigMenuState(for: fileName)
 
         guard let target = self.resolveRemoteConfigRefreshTargetOrLogFailure(
             fileName: fileName,
             configDirectory: configDirectory)
         else {
-            self.setRemoteConfigMenuState(for: fileName, phase: .failed)
+            self.finishRemoteConfigRefresh(
+                for: fileName,
+                currentState: currentRefreshingState,
+                completion: .failed)
             return
         }
 
@@ -378,13 +386,18 @@ extension AppSession {
 
             await self.applyConfigMutationFollowUp(updatedFileNames: [fileName])
 
-            self.setRemoteConfigMenuState(
+            self.finishRemoteConfigRefresh(
                 for: fileName,
-                phase: .idle,
-                updatedAt: self.remoteConfigUpdatedAt(for: fileName) ?? Date())
+                currentState: currentRefreshingState,
+                completion: .succeeded(
+                    updatedAt: self.remoteConfigUpdatedAt(for: fileName),
+                    fallbackUpdatedAt: Date()))
         } catch {
             self.logRemoteConfigUpdateFailure(fileName: fileName, error: error)
-            self.setRemoteConfigMenuState(for: fileName, phase: .failed)
+            self.finishRemoteConfigRefresh(
+                for: fileName,
+                currentState: currentRefreshingState,
+                completion: .failed)
         }
     }
 
@@ -656,6 +669,16 @@ extension AppSession {
         self.remoteConfigMenuStates[fileName] = RemoteConfigMenuState(
             updatedAt: resolvedUpdatedAt,
             phase: phase)
+    }
+
+    private func finishRemoteConfigRefresh(
+        for fileName: String,
+        currentState: RemoteConfigMenuState,
+        completion: RemoteConfigRefreshCompletion)
+    {
+        self.remoteConfigMenuStates[fileName] = self.resolveRemoteConfigRefreshCompletionStateUseCase.execute(
+            current: currentState,
+            completion: completion)
     }
 
     private func resolveRemoteConfigRefreshTargetOrLogFailure(
