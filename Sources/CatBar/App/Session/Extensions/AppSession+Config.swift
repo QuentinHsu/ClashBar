@@ -8,6 +8,10 @@ extension AppSession {
         ResolveConfigMutationFollowUpUseCase()
     }
 
+    private var resolveRemoteConfigMenuStatesUseCase: ResolveRemoteConfigMenuStatesUseCase {
+        ResolveRemoteConfigMenuStatesUseCase()
+    }
+
     private var resolveRemoteConfigImportRequestUseCase: ResolveRemoteConfigImportRequestUseCase {
         ResolveRemoteConfigImportRequestUseCase()
     }
@@ -343,24 +347,10 @@ extension AppSession {
     }
 
     func refreshRemoteConfigMenuStates() {
-        let remoteFileNames = Set(self.remoteConfigSources.keys)
-        guard !remoteFileNames.isEmpty else {
-            self.remoteConfigMenuStates = [:]
-            return
-        }
-
-        var nextStates: [String: RemoteConfigMenuState] = [:]
-        nextStates.reserveCapacity(remoteFileNames.count)
-
-        for fileName in remoteFileNames {
-            let updatedAt = self.remoteConfigUpdatedAt(for: fileName)
-            let current = self.remoteConfigMenuStates[fileName] ?? .idle
-            nextStates[fileName] = self.remoteConfigMenuStateResolver.resolve(
-                current: current,
-                updatedAt: updatedAt)
-        }
-
-        self.remoteConfigMenuStates = nextStates
+        self.remoteConfigMenuStates = self.resolveRemoteConfigMenuStatesUseCase.execute(
+            remoteConfigSources: self.remoteConfigSources,
+            currentStates: self.remoteConfigMenuStates,
+            updatedAtProvider: self.remoteConfigUpdatedAt)
     }
 
     func remoteConfigMenuState(for fileName: String) -> RemoteConfigMenuState {
