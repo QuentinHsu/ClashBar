@@ -360,58 +360,7 @@ struct LatencyTestIconButton: View {
     }
 }
 
-struct CompactSelectionMenuConfiguration<Option: Hashable & Identifiable> {
-    let selection: Option
-    let options: [Option]
-    let symbol: String
-    let helpText: String
-    let optionTitle: (Option) -> String
-    let onSelect: (Option) -> Void
-}
-
 extension MenuBarRootView {
-    func fractionSummaryBadge(current: Int, total: Int) -> some View {
-        HStack(spacing: MenuBarLayoutTokens.space1) {
-            Text("\(current)")
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .bold))
-                .foregroundStyle(self.nativePrimaryLabel)
-            Text("/")
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .medium))
-                .foregroundStyle(self.nativeTertiaryLabel)
-            Text("\(total)")
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .medium))
-                .foregroundStyle(self.nativeSecondaryLabel)
-        }
-        .padding(.horizontal, MenuBarLayoutTokens.space6)
-        .padding(.vertical, MenuBarLayoutTokens.space2)
-        .background(self.nativeBadgeCapsule())
-    }
-
-    func compactSelectionMenu(
-        _ configuration: CompactSelectionMenuConfiguration<some Hashable & Identifiable>) -> some View
-    {
-        Menu {
-            ForEach(configuration.options) { option in
-                Button {
-                    configuration.onSelect(option)
-                } label: {
-                    if configuration.selection == option {
-                        Label(configuration.optionTitle(option), systemImage: "checkmark")
-                    } else {
-                        Text(configuration.optionTitle(option))
-                    }
-                }
-            }
-        } label: {
-            Label(configuration.optionTitle(configuration.selection), systemImage: configuration.symbol)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .medium))
-                .lineLimit(1)
-        }
-        .appBorderedButtonStyle()
-        .controlSize(.small)
-        .help(configuration.helpText)
-    }
-
     var isDarkAppearance: Bool {
         self.colorScheme == .dark
     }

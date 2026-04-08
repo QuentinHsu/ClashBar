@@ -91,7 +91,7 @@ extension MenuBarRootView {
 
     private var connectionsSourceChips: some View {
         HStack(spacing: MenuBarLayoutTokens.space2) {
-            self.logFilterToggleButton(
+            self.filterChipButton(
                 title: tr("ui.network.source.local"),
                 selected: remoteMachineStore.activeTarget.isLocal,
                 action: {
@@ -100,7 +100,7 @@ extension MenuBarRootView {
                 })
 
             ForEach(remoteMachineStore.machines) { machine in
-                self.logFilterToggleButton(
+                self.filterChipButton(
                     title: machine.name,
                     selected: remoteMachineStore.activeTargetID == machine.id,
                     action: {

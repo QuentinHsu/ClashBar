@@ -228,30 +228,4 @@ extension MenuBarRootView {
         }
         return self.statusColor
     }
-
-    func compactTopIcon(
-        _ symbol: String,
-        label: String,
-        role: ButtonRole? = nil,
-        warning: Bool = false,
-        toneOverride: Color? = nil,
-        isLoading: Bool = false,
-        action: @escaping () async -> Void) -> some View
-    {
-        let tone: Color = if let toneOverride {
-            toneOverride
-        } else if warning {
-            nativeCritical
-        } else {
-            nativeSecondaryLabel
-        }
-
-        return self.compactAsyncIconButton(
-            symbol: symbol,
-            label: label,
-            tint: tone.opacity(MenuBarLayoutTokens.Opacity.solid),
-            role: role,
-            isLoading: isLoading,
-            action: action)
-    }
 }
