@@ -31,6 +31,10 @@ extension AppSession {
         ResolveCoreFeatureRecoveryAttemptUseCase()
     }
 
+    private var resolveCoreFeatureRecoveryCompletionUseCase: ResolveCoreFeatureRecoveryCompletionUseCase {
+        ResolveCoreFeatureRecoveryCompletionUseCase()
+    }
+
     private struct CoreBootstrapOptions {
         let overlaySyncingKey: String
         let providerTrigger: ProviderRefreshTrigger
@@ -533,11 +537,10 @@ extension AppSession {
             let tunRestored = await self.restoreTunFeatureIfNeeded(requested: recovery.tunEnabled)
             let systemProxyRestored = await self.restoreSystemProxyFeatureIfNeeded(
                 requested: recovery.systemProxyEnabled)
-
-            let remaining = CoreFeatureRecoveryState(
-                systemProxyEnabled: recovery.systemProxyEnabled && !systemProxyRestored,
-                tunEnabled: recovery.tunEnabled && !tunRestored)
-            self.pendingCoreFeatureRecoveryState = remaining.pendingState
+            self.pendingCoreFeatureRecoveryState = self.resolveCoreFeatureRecoveryCompletionUseCase.execute(.init(
+                requestedRecovery: recovery,
+                systemProxyRestored: systemProxyRestored,
+                tunRestored: tunRestored))
         }
     }
 
