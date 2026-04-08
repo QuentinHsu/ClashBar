@@ -1,13 +1,27 @@
 import Foundation
 
+private struct SystemProxyPortSyncExecution {
+    let host: String
+    let ports: SystemProxyPorts
+    let shouldCloseConnections: Bool
+}
+
 @MainActor
 extension AppSession {
+    private var resolveDeferredEditableSettingsOverlayLoopActionUseCase: ResolveDeferredEditableSettingsOverlayLoopActionUseCase {
+        ResolveDeferredEditableSettingsOverlayLoopActionUseCase()
+    }
+
     private var buildEditableSettingsOverlayPatchBodyUseCase: BuildEditableSettingsOverlayPatchBodyUseCase {
         BuildEditableSettingsOverlayPatchBodyUseCase()
     }
 
     private var resolveEditableSettingsSyncPlanUseCase: ResolveEditableSettingsSyncPlanUseCase {
         ResolveEditableSettingsSyncPlanUseCase()
+    }
+
+    private var resolveEditableSettingsSyncExecutionUseCase: ResolveEditableSettingsSyncExecutionUseCase {
+        ResolveEditableSettingsSyncExecutionUseCase()
     }
 
     private var resolveSystemProxyPortSyncPlanUseCase: ResolveSystemProxyPortSyncPlanUseCase {
@@ -151,11 +165,9 @@ extension AppSession {
 
     func syncEditableSettings(from config: ConfigSnapshot) {
         let incoming = EditableSettingsSnapshot(config: config)
-        let plan = self.resolveEditableSettingsSyncPlanUseCase.execute(
+        self.syncEditableSettings(
             intent: .configRefresh(preserveLocalState: preserveLocalSettingsOnNextSync),
-            previous: lastSyncedEditableSettings,
             incoming: incoming)
-        self.applyEditableSettingsSyncPlan(plan)
     }
 
     func currentEditableSettingsSnapshot() -> EditableSettingsSnapshot {
@@ -202,7 +214,7 @@ extension AppSession {
         _ request: DeferredEditableSettingsOverlayRequest) async
     {
         self.deferredEditableSettingsOverlay = request
-        if await self.applyDeferredEditableSettingsOverlayIfPossible() {
+        if await self.applyDeferredEditableSettingsOverlayIfPossible(request) {
             self.cancelDeferredEditableSettingsOverlayTask()
             return
         }
@@ -370,12 +382,17 @@ extension AppSession {
 
     private func runDeferredEditableSettingsOverlaySyncLoop() async {
         for _ in 0..<120 {
-            guard self.shouldContinueDeferredEditableSettingsOverlaySyncLoop() else {
+            switch self.currentDeferredEditableSettingsOverlayLoopAction() {
+            case .stop:
                 return
-            }
-            if await self.applyDeferredEditableSettingsOverlayIfPossible() {
+            case .finish:
                 self.finishDeferredEditableSettingsOverlayTask()
                 return
+            case let .evaluateRequest(request):
+                if await self.applyDeferredEditableSettingsOverlayIfPossible(request) {
+                    self.finishDeferredEditableSettingsOverlayTask()
+                    return
+                }
             }
 
             guard await self.sleepBeforeDeferredEditableSettingsOverlayRetry() else {
@@ -384,10 +401,6 @@ extension AppSession {
         }
 
         self.finishDeferredEditableSettingsOverlayTask()
-    }
-
-    private func shouldContinueDeferredEditableSettingsOverlaySyncLoop() -> Bool {
-        !Task.isCancelled && self.isRuntimeRunning
     }
 
     private func sleepBeforeDeferredEditableSettingsOverlayRetry() async -> Bool {
@@ -399,15 +412,28 @@ extension AppSession {
         }
     }
 
-    private func applyDeferredEditableSettingsOverlayIfPossible() async -> Bool {
-        guard let deferred = self.deferredEditableSettingsOverlay else { return true }
+    private func currentDeferredEditableSettingsOverlayLoopAction() -> DeferredEditableSettingsOverlayLoopAction {
+        self.resolveDeferredEditableSettingsOverlayLoopActionUseCase.execute(
+            request: self.deferredEditableSettingsOverlay,
+            isRuntimeRunning: self.isRuntimeRunning,
+            isTaskCancelled: Task.isCancelled)
+    }
+
+    private func applyDeferredEditableSettingsOverlayIfPossible(
+        _ request: DeferredEditableSettingsOverlayRequest) async -> Bool
+    {
         guard await self.isCoreAPIReachableForOverlaySync() else { return false }
 
-        let applied = await self.executeEditableSettingsOverlayRequest(deferred, successMessage: "")
+        let applied = await self.executeEditableSettingsOverlayRequest(request, successMessage: "")
         if applied {
-            self.deferredEditableSettingsOverlay = nil
+            self.clearDeferredEditableSettingsOverlayIfMatching(request)
         }
         return applied
+    }
+
+    private func clearDeferredEditableSettingsOverlayIfMatching(_ request: DeferredEditableSettingsOverlayRequest) {
+        guard self.deferredEditableSettingsOverlay == request else { return }
+        self.deferredEditableSettingsOverlay = nil
     }
 
     private func deferEditableSettingsOverlay(_ request: DeferredEditableSettingsOverlayRequest) {
@@ -529,35 +555,54 @@ extension AppSession {
     }
 
     private func syncSystemProxyPortIfNeeded(shouldSync: Bool, previousPorts: SystemProxyPorts?) async {
-        guard shouldSync, isSystemProxyEnabled else { return }
-
         do {
-            let target = try self.resolveSystemProxyTargetFromState()
-            let syncPlan = self.resolveSystemProxyPortSyncPlanUseCase.execute(
-                previousPorts: previousPorts,
-                currentPorts: target.ports)
-            try await self.applySystemProxyPortSyncTarget(
-                host: target.host,
-                ports: target.ports,
-                plan: syncPlan)
+            guard let execution = try self.resolveSystemProxyPortSyncExecutionIfNeeded(
+                shouldSync: shouldSync,
+                previousPorts: previousPorts)
+            else {
+                return
+            }
+
+            try await self.executeSystemProxyPortSync(execution)
+            await self.completeSystemProxyPortSync(execution)
         } catch {
-            appendLog(level: "error", message: tr("log.system_proxy.port_sync_failed", systemProxyErrorMessage(error)))
-            await self.refreshSystemProxyHelperStatus()
+            await self.handleSystemProxyPortSyncFailure(error)
         }
     }
 
-    private func applySystemProxyPortSyncTarget(
-        host: String,
-        ports: SystemProxyPorts,
-        plan: SystemProxyPortSyncPlan) async throws
+    private func resolveSystemProxyPortSyncExecutionIfNeeded(
+        shouldSync: Bool,
+        previousPorts: SystemProxyPorts?) throws -> SystemProxyPortSyncExecution?
     {
-        try await applySystemProxy(enabled: true, host: host, ports: ports)
-        systemProxyActiveDisplay = buildSystemProxyDisplayString(host: host, ports: ports)
-        appendLog(level: "info", message: tr("log.system_proxy.port_synced", ports.primaryPort ?? 0))
+        guard shouldSync, isSystemProxyEnabled else { return nil }
 
-        if plan.shouldCloseConnections {
+        let target = try self.resolveSystemProxyTargetFromState()
+        let syncPlan = self.resolveSystemProxyPortSyncPlanUseCase.execute(
+            previousPorts: previousPorts,
+            currentPorts: target.ports)
+
+        return SystemProxyPortSyncExecution(
+            host: target.host,
+            ports: target.ports,
+            shouldCloseConnections: syncPlan.shouldCloseConnections)
+    }
+
+    private func executeSystemProxyPortSync(_ execution: SystemProxyPortSyncExecution) async throws {
+        try await applySystemProxy(enabled: true, host: execution.host, ports: execution.ports)
+    }
+
+    private func completeSystemProxyPortSync(_ execution: SystemProxyPortSyncExecution) async {
+        systemProxyActiveDisplay = buildSystemProxyDisplayString(host: execution.host, ports: execution.ports)
+        appendLog(level: "info", message: tr("log.system_proxy.port_synced", execution.ports.primaryPort ?? 0))
+
+        if execution.shouldCloseConnections {
             await closeAllConnections()
         }
+    }
+
+    private func handleSystemProxyPortSyncFailure(_ error: Error) async {
+        appendLog(level: "error", message: tr("log.system_proxy.port_sync_failed", systemProxyErrorMessage(error)))
+        await self.refreshSystemProxyHelperStatus()
     }
 
     private func applyBooleanSetting(
@@ -569,9 +614,15 @@ extension AppSession {
     }
 
     private func applyEditableSettingsSyncPlan(_ plan: EditableSettingsSyncPlan) {
-        switch plan {
-        case .preserveLocal:
-            preserveLocalSettingsOnNextSync = false
+        let execution = self.resolveEditableSettingsSyncExecutionUseCase.execute(plan: plan)
+        self.applyEditableSettingsSyncUIAction(execution.uiAction)
+        self.completeEditableSettingsSync(execution)
+    }
+
+    private func applyEditableSettingsSyncUIAction(_ action: EditableSettingsSyncUIAction) {
+        switch action {
+        case .none:
+            return
         case let .applySnapshot(snapshot):
             self.applyEditableSettingsSnapshotToUI(snapshot)
         case let .syncPresented(previous, incoming):
@@ -579,20 +630,33 @@ extension AppSession {
             self.syncPresentedEditableSettings(from: previous, to: incoming)
             suppressSettingsPersistence = false
         }
+    }
 
-        lastSyncedEditableSettings = plan.incomingSnapshot
+    private func completeEditableSettingsSync(_ execution: EditableSettingsSyncExecution) {
+        if execution.shouldResetPreserveLocalState {
+            preserveLocalSettingsOnNextSync = false
+        }
+
+        lastSyncedEditableSettings = execution.syncedSnapshot
         persistEditableSettingsSnapshot()
+    }
+
+    private func syncEditableSettings(
+        intent: EditableSettingsSyncIntent,
+        incoming: EditableSettingsSnapshot)
+    {
+        let plan = self.resolveEditableSettingsSyncPlanUseCase.execute(
+            intent: intent,
+            previous: lastSyncedEditableSettings,
+            incoming: incoming)
+        self.applyEditableSettingsSyncPlan(plan)
     }
 
     private func reconcileEditableSettingsWithRuntimeConfig() async {
         do {
             let config = try await self.fetchRuntimeConfigSnapshot()
             let incoming = EditableSettingsSnapshot(config: config)
-            let plan = self.resolveEditableSettingsSyncPlanUseCase.execute(
-                intent: .runtimeReconciliation,
-                previous: lastSyncedEditableSettings,
-                incoming: incoming)
-            self.applyEditableSettingsSyncPlan(plan)
+            self.syncEditableSettings(intent: .runtimeReconciliation, incoming: incoming)
         } catch {
             appendLog(level: "error", message: "Settings reconciliation failed: \(error.localizedDescription)")
         }
