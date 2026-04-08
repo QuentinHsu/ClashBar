@@ -3,6 +3,10 @@ import Foundation
 
 @MainActor
 extension AppSession {
+    private var resolvePrimaryCoreActionUseCase: ResolvePrimaryCoreActionUseCase {
+        ResolvePrimaryCoreActionUseCase()
+    }
+
     private var startCoreFailureResolver: StartCoreFailureResolver {
         StartCoreFailureResolver()
     }
@@ -199,10 +203,15 @@ extension AppSession {
     }
 
     func performPrimaryCoreAction() async {
-        guard !isCoreActionProcessing else { return }
-        if isRuntimeRunning {
+        switch self.resolvePrimaryCoreActionUseCase.execute(
+            isCoreActionProcessing: self.isCoreActionProcessing,
+            isRuntimeRunning: self.isRuntimeRunning)
+        {
+        case .skip:
+            return
+        case .restart:
             await self.restartCore()
-        } else {
+        case .startManual:
             await self.startCore(trigger: .manual)
         }
     }

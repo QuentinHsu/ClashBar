@@ -4,6 +4,10 @@ import SwiftUI
 
 @MainActor
 final class AppSession: ObservableObject {
+    private var resolveAppLaunchAutoStartUseCase: ResolveAppLaunchAutoStartUseCase {
+        ResolveAppLaunchAutoStartUseCase()
+    }
+
     @Published private var coreRuntimePresentationState = CoreRuntimePresentationState()
     var localExternalControllerDisplay: String = "127.0.0.1:9090"
 
@@ -1113,11 +1117,13 @@ final class AppSession: ObservableObject {
 
             self.startConfigDirectoryMonitoringIfNeeded()
         }
-        if startBackgroundRefresh, self.autoStartCore {
-            if !self.shouldDeferAutoStartForMissingManagedCore() {
-                Task { [weak self] in
-                    await self?.attemptAutoStartIfNeeded()
-                }
+        if self.resolveAppLaunchAutoStartUseCase.execute(.init(
+            startBackgroundRefresh: startBackgroundRefresh,
+            autoStartCoreEnabled: self.autoStartCore,
+            shouldDeferForMissingManagedCore: self.shouldDeferAutoStartForMissingManagedCore())) == .schedule
+        {
+            Task { [weak self] in
+                await self?.attemptAutoStartIfNeeded()
             }
         }
 
