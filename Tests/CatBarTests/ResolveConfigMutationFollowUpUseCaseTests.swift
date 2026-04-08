@@ -8,8 +8,10 @@ final class ResolveConfigMutationFollowUpUseCaseTests: XCTestCase {
         let plan = self.useCase.execute(
             updatedFileNames: [],
             selectedConfigName: "active.yaml",
-            isRuntimeRunning: true)
+            isRuntimeRunning: true,
+            hasRemoteSourceChanges: false)
 
+        XCTAssertFalse(plan.shouldRefreshConfigState)
         XCTAssertFalse(plan.shouldReloadCurrentConfig)
     }
 
@@ -17,8 +19,10 @@ final class ResolveConfigMutationFollowUpUseCaseTests: XCTestCase {
         let plan = self.useCase.execute(
             updatedFileNames: ["active.yaml"],
             selectedConfigName: "active.yaml",
-            isRuntimeRunning: false)
+            isRuntimeRunning: false,
+            hasRemoteSourceChanges: false)
 
+        XCTAssertTrue(plan.shouldRefreshConfigState)
         XCTAssertFalse(plan.shouldReloadCurrentConfig)
     }
 
@@ -26,8 +30,10 @@ final class ResolveConfigMutationFollowUpUseCaseTests: XCTestCase {
         let plan = self.useCase.execute(
             updatedFileNames: ["other.yaml"],
             selectedConfigName: "active.yaml",
-            isRuntimeRunning: true)
+            isRuntimeRunning: true,
+            hasRemoteSourceChanges: false)
 
+        XCTAssertTrue(plan.shouldRefreshConfigState)
         XCTAssertFalse(plan.shouldReloadCurrentConfig)
     }
 
@@ -35,8 +41,21 @@ final class ResolveConfigMutationFollowUpUseCaseTests: XCTestCase {
         let plan = self.useCase.execute(
             updatedFileNames: ["active.yaml", "other.yaml"],
             selectedConfigName: "active.yaml",
-            isRuntimeRunning: true)
+            isRuntimeRunning: true,
+            hasRemoteSourceChanges: false)
 
+        XCTAssertTrue(plan.shouldRefreshConfigState)
         XCTAssertTrue(plan.shouldReloadCurrentConfig)
+    }
+
+    func testExecuteRefreshesConfigStateWhenOnlyRemoteSourceChanged() {
+        let plan = self.useCase.execute(
+            updatedFileNames: [],
+            selectedConfigName: "active.yaml",
+            isRuntimeRunning: true,
+            hasRemoteSourceChanges: true)
+
+        XCTAssertTrue(plan.shouldRefreshConfigState)
+        XCTAssertFalse(plan.shouldReloadCurrentConfig)
     }
 }
