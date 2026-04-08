@@ -1,23 +1,8 @@
 import Foundation
 
-private struct ProxyLatencyMeasurementJobKey: Hashable {
-    let proxyKey: String
-    let testURL: String
-    let timeout: Int
-}
-
-private struct ProxyLatencyMeasurementTarget {
-    let groupName: String
-    let delayKey: String
-}
-
-private struct ProxyLatencyMeasurementPlan {
-    let orderedJobs: [(key: ProxyLatencyMeasurementJobKey, nodeName: String)]
-    let groupJobs: [String: [String: ProxyLatencyMeasurementJobKey]]
-    let jobTargets: [ProxyLatencyMeasurementJobKey: [ProxyLatencyMeasurementTarget]]
-    let groupPendingCounts: [String: Int]
-    let groupPendingDelayKeys: [String: Set<String>]
-    let groupDirectNodes: [String: [String]]
+private struct SystemProxyToggleTarget {
+    let host: String
+    let ports: SystemProxyPorts
 }
 
 struct RefCountedPresence<Key: Hashable> {
@@ -77,6 +62,22 @@ struct NestedRefCountedPresence<Outer: Hashable, Inner: Hashable> {
 
 @MainActor
 extension AppSession {
+    private var resolveManagedProxyCommandHostUseCase: ResolveManagedProxyCommandHostUseCase {
+        ResolveManagedProxyCommandHostUseCase()
+    }
+
+    private var resolveProxyCommandPortsUseCase: ResolveProxyCommandPortsUseCase {
+        ResolveProxyCommandPortsUseCase()
+    }
+
+    private var resolveSystemProxyTogglePlanUseCase: ResolveSystemProxyTogglePlanUseCase {
+        ResolveSystemProxyTogglePlanUseCase()
+    }
+
+    private var resolveProxyLatencyMeasurementPlanUseCase: ResolveProxyLatencyMeasurementPlanUseCase {
+        ResolveProxyLatencyMeasurementPlanUseCase()
+    }
+
     private func proxyRuntimeConfigRepository(using transport: any MihomoAPITransporting) -> RuntimeConfigRepository {
         DefaultRuntimeConfigRepository(transport: transport)
     }
@@ -121,69 +122,24 @@ extension AppSession {
         defer { isProxySyncing = false }
         defer { self.systemProxyEnableIntentInFlight = false }
 
-        guard self.isRemoteTarget || self.isRuntimeRunning else {
-            isSystemProxyEnabled = enabled
-            persistEditableSettingsSnapshot()
-            let state = enabled ? tr("log.system_proxy.enabled") : tr("log.system_proxy.disabled")
-            appendLog(level: "info", message: tr("log.system_proxy.toggled", state))
+        let plan = self.resolveSystemProxyTogglePlanUseCase.execute(
+            enabled: enabled,
+            isRemoteTarget: self.isRemoteTarget,
+            isRuntimeRunning: self.isRuntimeRunning,
+            wasSystemProxyEnabled: self.isSystemProxyEnabled)
 
-            do {
-                if enabled {
-                    let ports = self.currentSystemProxyPortsFromState()
-                    let host = self.controllerHost()
-                    try await applySystemProxy(enabled: true, host: host, ports: ports)
-                    systemProxyActiveDisplay = self.buildSystemProxyDisplayString(host: host, ports: ports)
-                    await self.refreshSystemProxyHelperStatus()
-                } else {
-                    try await applySystemProxy(enabled: false, host: self.controllerHost(), ports: .disabled)
-                    systemProxyActiveDisplay = nil
-                    self.resetSystemProxyObservedState()
-                }
-            } catch {
-                appendLog(level: "error", message: tr("log.system_proxy.toggle_failed", systemProxyErrorMessage(error)))
-                if enabled {
-                    self.updateSystemProxyOpenFailureHint(for: error)
-                    await self.refreshSystemProxyHelperStatus()
-                }
-            }
-            return
-        }
+        self.applyOptimisticSystemProxyToggleStateIfNeeded(enabled: enabled, plan: plan)
+        self.appendSystemProxyToggleLogIfNeeded(enabled: enabled, shouldAppend: plan.shouldAppendToggleLogBeforeExecution)
 
         do {
-            if enabled {
-                let target = try resolveSystemProxyTargetFromState()
-                try await applySystemProxy(enabled: true, host: target.host, ports: target.ports)
-                systemProxyActiveDisplay = self.buildSystemProxyDisplayString(host: target.host, ports: target.ports)
-            } else {
-                try await applySystemProxy(enabled: false, host: self.controllerHost(), ports: .disabled)
-                systemProxyActiveDisplay = nil
-            }
-
-            try await self.patchRuntimeConfigUseCase().execute(body: ["mode": .string(currentMode.rawValue)])
-            await self.closeAllConnections()
-
-            isSystemProxyEnabled = enabled
-            self.clearSystemProxyOpenFailureHint()
-            self.systemProxyHelperFailureReason = nil
-            self.systemProxyHelperFailureMessage = nil
-            if enabled {
-                await self.refreshSystemProxyHelperRuntimeSnapshot()
-            } else {
-                self.resetSystemProxyObservedState()
-            }
-            let state = enabled ? tr("log.system_proxy.enabled") : tr("log.system_proxy.disabled")
-            appendLog(level: "info", message: tr("log.system_proxy.toggled", state))
+            let target = try self.resolveSystemProxyToggleTarget(enabled: enabled, plan: plan)
+            try await self.executeSystemProxyToggle(target: target, enabled: enabled, plan: plan)
+            await self.completeSystemProxyToggleSuccess(
+                enabled: enabled,
+                target: target,
+                plan: plan)
         } catch {
-            appendLog(level: "error", message: tr("log.system_proxy.toggle_failed", systemProxyErrorMessage(error)))
-            if enabled {
-                self.updateSystemProxyOpenFailureHint(for: error)
-            }
-            await self.refreshSystemProxyHelperStatus()
-            if enabled || self.isSystemProxyEnabled {
-                await refreshSystemProxyStatus()
-            } else {
-                self.resetSystemProxyObservedState()
-            }
+            await self.handleSystemProxyToggleFailure(error, plan: plan)
         }
     }
 
@@ -219,10 +175,13 @@ extension AppSession {
     }
 
     private func copyProxyCommand(host: String) {
-        let ports = currentSystemProxyPortsFromState()
-        let httpPort = ports.httpPort ?? ports.socksPort ?? effectiveMixedPort()
-        let socksPort = ports.socksPort ?? ports.httpPort ?? httpPort
-        let script = BuildTerminalProxyCommandUseCase().execute(host: host, httpPort: httpPort, socksPort: socksPort)
+        let ports = self.resolveProxyCommandPortsUseCase.execute(
+            systemProxyPorts: currentSystemProxyPortsFromState(),
+            effectiveMixedPort: effectiveMixedPort())
+        let script = BuildTerminalProxyCommandUseCase().execute(
+            host: host,
+            httpPort: ports.httpPort,
+            socksPort: ports.socksPort)
         copyTextToPasteboard(script)
         appendLog(level: "info", message: tr("log.proxy_export.copied"))
     }
@@ -445,12 +404,14 @@ extension AppSession {
     private func refreshResolvedGroupLatencies(startingFrom rootGroups: [ProxyGroup]) async {
         self.rebuildProxyGroupIndex()
 
-        let expandedGroups = self.expandedReferencedGroups(startingFrom: rootGroups)
-        let wholeGroupTypes = expandedGroups.filter { self.usesWholeGroupLatencyPresentation($0) }
-        let nodeGroups = expandedGroups.filter { !self.usesWholeGroupLatencyPresentation($0) }
-        let measurementPlan = self.makeNodeLatencyMeasurementPlan(
-            groupsToRefresh: nodeGroups,
-            rootGroups: rootGroups)
+        let measurementPlan = self.resolveProxyLatencyMeasurementPlanUseCase.execute(
+            rootGroups: rootGroups,
+            proxyGroupsByName: self.proxyGroupsByName(),
+            proxyNodeIDs: self.proxyNodeIDs,
+            defaultTestURL: self.defaultHealthcheckURL,
+            defaultTimeout: self.defaultHealthcheckTimeoutMilliseconds)
+        let nodeGroups = self.proxyGroups(named: measurementPlan.nodeGroupNames)
+        let wholeGroupTypes = self.proxyGroups(named: measurementPlan.wholeGroupNames)
 
         var remainingGroupJobs = measurementPlan.groupPendingCounts
 
@@ -491,147 +452,6 @@ extension AppSession {
             directNodes: wholeGroupDirectNodes)
 
         _ = await (nodeMeasurements, wholeGroupMeasurements)
-    }
-
-    private func expandedReferencedGroups(startingFrom rootGroups: [ProxyGroup]) -> [ProxyGroup] {
-        var visited: Set<String> = []
-        var orderedGroups: [ProxyGroup] = []
-
-        func visit(_ group: ProxyGroup) {
-            guard visited.insert(group.name).inserted else { return }
-            orderedGroups.append(group)
-
-            for candidate in group.all {
-                guard let referencedGroup = self.proxyGroup(named: candidate) else { continue }
-                visit(referencedGroup)
-            }
-        }
-
-        for group in rootGroups {
-            visit(group)
-        }
-
-        return orderedGroups
-    }
-
-    private func makeNodeLatencyMeasurementPlan(
-        groupsToRefresh: [ProxyGroup],
-        rootGroups: [ProxyGroup]) -> ProxyLatencyMeasurementPlan
-    {
-        var orderedJobs: [(key: ProxyLatencyMeasurementJobKey, nodeName: String)] = []
-        var seenJobs: Set<ProxyLatencyMeasurementJobKey> = []
-        var groupJobs: [String: [String: ProxyLatencyMeasurementJobKey]] = [:]
-        var jobTargets: [ProxyLatencyMeasurementJobKey: [ProxyLatencyMeasurementTarget]] = [:]
-        var groupPendingCounts: [String: Int] = [:]
-        var groupPendingDelayKeys: [String: Set<String>] = [:]
-        var groupDirectNodes: [String: [String]] = [:]
-
-        for group in groupsToRefresh {
-            let directNodes = self.directLatencyTestNodes(in: group)
-            groupDirectNodes[group.name] = directNodes
-            guard !directNodes.isEmpty else {
-                groupJobs[group.name] = [:]
-                groupPendingCounts[group.name] = 0
-                continue
-            }
-
-            let testURL = normalizedHealthcheckURL(group.testUrl) ?? defaultHealthcheckURL
-            let timeout = normalizedHealthcheckTimeout(group.timeout) ?? defaultHealthcheckTimeoutMilliseconds
-            var resolvedGroupJobs: Set<ProxyLatencyMeasurementJobKey> = []
-            var pendingDelayKeys: Set<String> = []
-            var resolvedGroupJobLookup: [String: ProxyLatencyMeasurementJobKey] = [:]
-
-            for nodeName in directNodes {
-                let delayKey = self.proxyDelayLookupKey(nodeName: nodeName)
-                let jobKey = ProxyLatencyMeasurementJobKey(
-                    proxyKey: delayKey,
-                    testURL: testURL,
-                    timeout: timeout)
-                if seenJobs.insert(jobKey).inserted {
-                    orderedJobs.append((key: jobKey, nodeName: nodeName))
-                }
-                jobTargets[jobKey, default: []].append(
-                    ProxyLatencyMeasurementTarget(
-                        groupName: group.name,
-                        delayKey: delayKey))
-                resolvedGroupJobs.insert(jobKey)
-                pendingDelayKeys.insert(delayKey)
-                resolvedGroupJobLookup[delayKey] = jobKey
-            }
-
-            groupJobs[group.name] = resolvedGroupJobLookup
-            groupPendingCounts[group.name] = resolvedGroupJobs.count
-            groupPendingDelayKeys[group.name] = pendingDelayKeys
-        }
-
-        orderedJobs = self.prioritizedLatencyMeasurementJobs(
-            orderedJobs,
-            rootGroups: rootGroups,
-            groupJobs: groupJobs)
-
-        return ProxyLatencyMeasurementPlan(
-            orderedJobs: orderedJobs,
-            groupJobs: groupJobs,
-            jobTargets: jobTargets,
-            groupPendingCounts: groupPendingCounts,
-            groupPendingDelayKeys: groupPendingDelayKeys,
-            groupDirectNodes: groupDirectNodes)
-    }
-
-    private func prioritizedLatencyMeasurementJobs(
-        _ orderedJobs: [(key: ProxyLatencyMeasurementJobKey, nodeName: String)],
-        rootGroups: [ProxyGroup],
-        groupJobs: [String: [String: ProxyLatencyMeasurementJobKey]]) -> [(key: ProxyLatencyMeasurementJobKey, nodeName: String)]
-    {
-        guard !orderedJobs.isEmpty else { return orderedJobs }
-
-        var priorityKeys: [ProxyLatencyMeasurementJobKey] = []
-        var seenPriorityKeys: Set<ProxyLatencyMeasurementJobKey> = []
-
-        for group in rootGroups {
-            guard let currentNode = group.now?.trimmedNonEmpty else { continue }
-            if let jobKey = self.currentLatencyMeasurementJobKey(
-                currentGroup: group.name,
-                proxyName: currentNode,
-                groupJobs: groupJobs,
-                visitedGroups: [group.name]),
-               seenPriorityKeys.insert(jobKey).inserted
-            {
-                priorityKeys.append(jobKey)
-            }
-        }
-
-        guard !priorityKeys.isEmpty else { return orderedJobs }
-
-        let jobLookup = Dictionary(uniqueKeysWithValues: orderedJobs.map { ($0.key, $0) })
-        let prioritizedJobs = priorityKeys.compactMap { jobLookup[$0] }
-        let remainingJobs = orderedJobs.filter { !seenPriorityKeys.contains($0.key) }
-        return prioritizedJobs + remainingJobs
-    }
-
-    private func currentLatencyMeasurementJobKey(
-        currentGroup: String,
-        proxyName: String,
-        groupJobs: [String: [String: ProxyLatencyMeasurementJobKey]],
-        visitedGroups: Set<String>) -> ProxyLatencyMeasurementJobKey?
-    {
-        let delayKey = self.proxyDelayLookupKey(nodeName: proxyName)
-        if let directJobKey = groupJobs[currentGroup]?[delayKey] {
-            return directJobKey
-        }
-
-        guard let referencedGroup = self.proxyGroup(named: proxyName),
-              !visitedGroups.contains(referencedGroup.name),
-              let nestedNode = referencedGroup.now?.trimmedNonEmpty
-        else {
-            return nil
-        }
-
-        return self.currentLatencyMeasurementJobKey(
-            currentGroup: referencedGroup.name,
-            proxyName: nestedNode,
-            groupJobs: groupJobs,
-            visitedGroups: visitedGroups.union([referencedGroup.name]))
     }
 
     private func executeLatencyMeasurementPlan(
@@ -834,22 +654,6 @@ extension AppSession {
         }
     }
 
-    private func beginGroupLatencyLoading(_ groupName: String) {
-        self.beginPresentedGroupLatencyLoading(groupName)
-    }
-
-    private func endGroupLatencyLoading(_ groupName: String) {
-        self.endPresentedGroupLatencyLoading(groupName)
-    }
-
-    private func beginGroupLatencyPending(groupName: String, delayKey: String) {
-        self.beginPresentedGroupLatencyPending(groupName: groupName, delayKey: delayKey)
-    }
-
-    private func endGroupLatencyPending(groupName: String, delayKey: String) {
-        self.endPresentedGroupLatencyPending(groupName: groupName, delayKey: delayKey)
-    }
-
     private func beginNodeLatencyLoading(_ nodeName: String) {
         self.beginPresentedNodeLatencyLoading(nodeName)
     }
@@ -866,28 +670,12 @@ extension AppSession {
     }
 
     private func managedEndpointProxyCommandHost() -> String {
-        guard !self.isRemoteTarget else {
-            return self.controllerHost()
-        }
-
-        let configuredHost = self.controllerHost(from: self.localExternalControllerDisplay) ?? self.controllerHost()
-        guard self.settingsAllowLan else {
-            return configuredHost
-        }
-        guard self.shouldUseCurrentDeviceIPv4ForProxyCommand(host: configuredHost) else {
-            return configuredHost
-        }
-
-        return DeviceIPv4AddressResolver.currentAddress() ?? self.controllerHost()
-    }
-
-    private func shouldUseCurrentDeviceIPv4ForProxyCommand(host: String) -> Bool {
-        switch host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "", "localhost", "127.0.0.1", "::1", "0.0.0.0", "::", "0:0:0:0:0:0:0:0":
-            true
-        default:
-            false
-        }
+        self.resolveManagedProxyCommandHostUseCase.execute(
+            isRemoteTarget: self.isRemoteTarget,
+            controllerHost: self.controllerHost(),
+            localExternalControllerHost: self.controllerHost(from: self.localExternalControllerDisplay),
+            allowLan: self.settingsAllowLan,
+            currentDeviceIPv4: DeviceIPv4AddressResolver.currentAddress())
     }
 
     func buildSystemProxyDisplayString(host: String, ports: SystemProxyPorts) -> String? {
@@ -926,5 +714,126 @@ extension AppSession {
             return components.string ?? base
         }
         return base
+    }
+
+    private func proxyGroupsByName() -> [String: ProxyGroup] {
+        Dictionary(uniqueKeysWithValues: self.proxyGroups.map { ($0.name, $0) })
+    }
+
+    private func proxyGroups(named names: [String]) -> [ProxyGroup] {
+        guard !names.isEmpty else { return [] }
+        let groupsByName = self.proxyGroupsByName()
+        return names.compactMap { groupsByName[$0] }
+    }
+
+    private func applyOptimisticSystemProxyToggleStateIfNeeded(
+        enabled: Bool,
+        plan: SystemProxyTogglePlan)
+    {
+        guard plan.shouldOptimisticallyUpdateEnabledState else { return }
+
+        isSystemProxyEnabled = enabled
+        if plan.shouldPersistEditableSettingsSnapshot {
+            persistEditableSettingsSnapshot()
+        }
+    }
+
+    private func resolveSystemProxyToggleTarget(
+        enabled: Bool,
+        plan: SystemProxyTogglePlan) throws -> SystemProxyToggleTarget
+    {
+        guard enabled else {
+            return SystemProxyToggleTarget(host: self.controllerHost(), ports: .disabled)
+        }
+
+        switch plan.executionMode {
+        case .optimisticLocalOnly:
+            return SystemProxyToggleTarget(host: self.controllerHost(), ports: self.currentSystemProxyPortsFromState())
+        case .runtimeSynchronized:
+            let target = try self.resolveSystemProxyTargetFromState()
+            return SystemProxyToggleTarget(host: target.host, ports: target.ports)
+        }
+    }
+
+    private func executeSystemProxyToggle(
+        target: SystemProxyToggleTarget,
+        enabled: Bool,
+        plan: SystemProxyTogglePlan) async throws
+    {
+        try await applySystemProxy(enabled: enabled, host: target.host, ports: target.ports)
+
+        if plan.shouldPatchRuntimeMode {
+            try await self.patchRuntimeConfigUseCase().execute(body: ["mode": .string(currentMode.rawValue)])
+        }
+
+        if plan.shouldCloseConnections {
+            await self.closeAllConnections()
+        }
+    }
+
+    private func completeSystemProxyToggleSuccess(
+        enabled: Bool,
+        target: SystemProxyToggleTarget,
+        plan: SystemProxyTogglePlan) async
+    {
+        isSystemProxyEnabled = enabled
+        systemProxyActiveDisplay = enabled
+            ? self.buildSystemProxyDisplayString(host: target.host, ports: target.ports)
+            : nil
+
+        if plan.success.shouldClearFailureHint {
+            self.clearSystemProxyOpenFailureHint()
+        }
+
+        if plan.success.shouldClearHelperFailureState {
+            self.systemProxyHelperFailureReason = nil
+            self.systemProxyHelperFailureMessage = nil
+        }
+
+        await self.performSystemProxyHelperRefresh(plan.success.helperRefresh)
+
+        if plan.success.shouldResetObservedState {
+            self.resetSystemProxyObservedState()
+        }
+
+        self.appendSystemProxyToggleLogIfNeeded(enabled: enabled, shouldAppend: plan.success.shouldAppendToggleLog)
+    }
+
+    private func handleSystemProxyToggleFailure(
+        _ error: Error,
+        plan: SystemProxyTogglePlan) async
+    {
+        appendLog(level: "error", message: tr("log.system_proxy.toggle_failed", systemProxyErrorMessage(error)))
+
+        if plan.failure.shouldUpdateFailureHint {
+            self.updateSystemProxyOpenFailureHint(for: error)
+        }
+
+        if plan.failure.shouldRefreshHelperStatus {
+            await self.refreshSystemProxyHelperStatus()
+        }
+
+        if plan.failure.shouldRefreshSystemProxyStatus {
+            await refreshSystemProxyStatus()
+        } else if plan.failure.shouldResetObservedState {
+            self.resetSystemProxyObservedState()
+        }
+    }
+
+    private func performSystemProxyHelperRefresh(_ refresh: SystemProxyToggleHelperRefresh) async {
+        switch refresh {
+        case .none:
+            return
+        case .status:
+            await self.refreshSystemProxyHelperStatus()
+        case .runtimeSnapshot:
+            await self.refreshSystemProxyHelperRuntimeSnapshot()
+        }
+    }
+
+    private func appendSystemProxyToggleLogIfNeeded(enabled: Bool, shouldAppend: Bool) {
+        guard shouldAppend else { return }
+        let state = enabled ? tr("log.system_proxy.enabled") : tr("log.system_proxy.disabled")
+        appendLog(level: "info", message: tr("log.system_proxy.toggled", state))
     }
 }
