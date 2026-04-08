@@ -4,8 +4,16 @@ import UniformTypeIdentifiers
 
 @MainActor
 extension AppSession {
+    private var resolveConfigReloadFeedbackUseCase: ResolveConfigReloadFeedbackUseCase {
+        ResolveConfigReloadFeedbackUseCase()
+    }
+
     private var resolveConfigMutationFollowUpUseCase: ResolveConfigMutationFollowUpUseCase {
         ResolveConfigMutationFollowUpUseCase()
+    }
+
+    private var resolveRemoteConfigImportFeedbackUseCase: ResolveRemoteConfigImportFeedbackUseCase {
+        ResolveRemoteConfigImportFeedbackUseCase()
     }
 
     private var resolveRemoteConfigRefreshCompletionStateUseCase: ResolveRemoteConfigRefreshCompletionStateUseCase {
@@ -246,7 +254,9 @@ extension AppSession {
             inferredRemoteConfigFileName: self.inferredRemoteConfigFileName,
             normalizedConfigFileName: self.normalizedConfigFileName)
         guard case let .success(request) = requestResult else {
-            self.handleRemoteConfigImportRequestFailure(requestResult)
+            if let feedback = self.remoteConfigImportFeedback(from: requestResult) {
+                self.presentRemoteConfigImportFeedback(feedback)
+            }
             return
         }
 
@@ -265,18 +275,20 @@ extension AppSession {
                 targetURL: destination.targetURL)
 
             self.updateRemoteConfigSource(for: destination.fileName, urlString: request.remoteURL.absoluteString)
-            let message = tr("log.config.import_remote.success", destination.fileName)
-            appendLog(level: "info", message: message)
+            let feedback = self.remoteConfigImportFeedback(
+                outcome: .succeeded(fileName: destination.fileName))
 
             if destination.isOverwrite {
                 await self.applyConfigMutationFollowUp(updatedFileNames: [destination.fileName])
             }
 
-            self.presentRemoteConfigImportResultAlert(success: true, message: message)
+            self.presentRemoteConfigImportFeedback(feedback)
         } catch {
-            let message = tr("log.config.import_remote.failed", destination.fileName, error.localizedDescription)
-            appendLog(level: "error", message: message)
-            self.presentRemoteConfigImportResultAlert(success: false, message: message)
+            let feedback = self.remoteConfigImportFeedback(
+                outcome: .failed(
+                    fileName: destination.fileName,
+                    reason: error.localizedDescription))
+            self.presentRemoteConfigImportFeedback(feedback)
         }
     }
 
@@ -407,9 +419,14 @@ extension AppSession {
 
         do {
             try await self.executeConfigReload(expectedTunEnabled: expectedTunEnabled)
-            appendLog(level: "info", message: tr("log.action.success", actionName))
+            self.appendConfigReloadFeedback(
+                self.configReloadFeedback(outcome: .succeeded(actionName: actionName)))
         } catch {
-            appendLog(level: "error", message: tr("log.action.failed", actionName, error.localizedDescription))
+            self.appendConfigReloadFeedback(
+                self.configReloadFeedback(
+                    outcome: .failed(
+                        actionName: actionName,
+                        reason: error.localizedDescription)))
         }
     }
 
@@ -477,23 +494,6 @@ extension AppSession {
         self.prepareModalWindowPresentation()
         self.configureModalWindow(alert.window)
         alert.runModal()
-    }
-
-    private func handleRemoteConfigImportRequestFailure(
-        _ result: Result<RemoteConfigImportRequest, ResolveRemoteConfigImportRequestError>)
-    {
-        guard case let .failure(error) = result else { return }
-
-        let message: String
-        switch error {
-        case let .invalidURL(input):
-            message = tr("log.config.remote.invalid_url", input)
-        case let .invalidFileName(input):
-            message = tr("log.config.import.invalid_filename", input)
-        }
-
-        appendLog(level: "error", message: message)
-        self.presentRemoteConfigImportResultAlert(success: false, message: message)
     }
 
     private struct RemoteConfigImportInput {
@@ -612,6 +612,17 @@ extension AppSession {
         try await self.restoreTunAfterConfigReloadIfNeeded(expectedEnabled: expectedTunEnabled)
     }
 
+    private func configReloadFeedback(outcome: ConfigReloadFeedbackOutcome) -> ConfigReloadFeedback {
+        self.resolveConfigReloadFeedbackUseCase.execute(
+            outcome: outcome,
+            successMessage: { tr("log.action.success", $0) },
+            failureMessage: { tr("log.action.failed", $0, $1) })
+    }
+
+    private func appendConfigReloadFeedback(_ feedback: ConfigReloadFeedback) {
+        appendLog(level: feedback.logLevel, message: feedback.message)
+    }
+
     private func applyConfigMutationFollowUp(updatedFileNames: Set<String>) async {
         let followUpPlan = self.resolveConfigMutationFollowUpUseCase.execute(
             updatedFileNames: updatedFileNames,
@@ -658,6 +669,31 @@ extension AppSession {
             message: self.remoteConfigUpdateFailureMessage(
                 fileName: fileName,
                 reason: error.localizedDescription))
+    }
+
+    private func remoteConfigImportFeedback(
+        from result: Result<RemoteConfigImportRequest, ResolveRemoteConfigImportRequestError>) -> RemoteConfigImportFeedback?
+    {
+        guard case let .failure(error) = result else { return nil }
+        return self.remoteConfigImportFeedback(outcome: .requestValidationFailed(error))
+    }
+
+    private func remoteConfigImportFeedback(
+        outcome: RemoteConfigImportFeedbackOutcome) -> RemoteConfigImportFeedback
+    {
+        self.resolveRemoteConfigImportFeedbackUseCase.execute(
+            outcome: outcome,
+            invalidURLMessage: { tr("log.config.remote.invalid_url", $0) },
+            invalidFileNameMessage: { tr("log.config.import.invalid_filename", $0) },
+            successMessage: { tr("log.config.import_remote.success", $0) },
+            failureMessage: { tr("log.config.import_remote.failed", $0, $1) })
+    }
+
+    private func presentRemoteConfigImportFeedback(_ feedback: RemoteConfigImportFeedback) {
+        appendLog(level: feedback.logLevel, message: feedback.message)
+        self.presentRemoteConfigImportResultAlert(
+            success: feedback.alertIsSuccess,
+            message: feedback.message)
     }
 
     private func setRemoteConfigMenuState(
