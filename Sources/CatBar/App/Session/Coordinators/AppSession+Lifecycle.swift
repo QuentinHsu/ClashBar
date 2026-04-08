@@ -3,6 +3,10 @@ import Foundation
 
 @MainActor
 extension AppSession {
+    private var resolveCoreBootstrapOptionsUseCase: ResolveCoreBootstrapOptionsUseCase {
+        ResolveCoreBootstrapOptionsUseCase()
+    }
+
     private var resolvePrimaryCoreActionUseCase: ResolvePrimaryCoreActionUseCase {
         ResolvePrimaryCoreActionUseCase()
     }
@@ -37,15 +41,6 @@ extension AppSession {
 
     private var resolveCoreFeatureRecoveryCompletionUseCase: ResolveCoreFeatureRecoveryCompletionUseCase {
         ResolveCoreFeatureRecoveryCompletionUseCase()
-    }
-
-    private struct CoreBootstrapOptions {
-        let overlaySyncingKey: String
-        let providerTrigger: ProviderRefreshTrigger
-        let refreshProxyGroupsAfterBootstrap: Bool
-        let refreshSystemProxyBeforeOverlay: Bool
-        let refreshSystemProxyAfterBootstrap: Bool
-        let autoTestGroupLatencies: Bool
     }
 
     private struct CoreLaunchContext {
@@ -427,21 +422,16 @@ extension AppSession {
     }
 
     private func executeStartCoreLaunchPlan(_ plan: CoreLaunchPlan) async throws {
-        statusText = "Starting"
-        _ = try await self.startCoreUseCase.execute(
-            configPath: plan.launchContext.configPath,
-            controller: plan.launchContext.launchController)
-
-        await self.completeCoreBootstrap(
-            configPath: plan.launchContext.configPath,
-            settingsOverlay: plan.settingsOverlay,
-            options: CoreBootstrapOptions(
-                overlaySyncingKey: "start-overlay",
-                providerTrigger: .start,
-                refreshProxyGroupsAfterBootstrap: false,
-                refreshSystemProxyBeforeOverlay: true,
-                refreshSystemProxyAfterBootstrap: false,
-                autoTestGroupLatencies: true))
+        let bootstrapOptions = self.resolveCoreBootstrapOptionsUseCase.execute(.start)
+        try await self.executeCoreLaunchPlan(
+            plan,
+            bootstrapOptions: bootstrapOptions,
+            preLaunch: { self.statusText = "Starting" },
+            launchOperation: {
+                _ = try await self.startCoreUseCase.execute(
+                    configPath: plan.launchContext.configPath,
+                    controller: plan.launchContext.launchController)
+            })
     }
 
     private func prepareRestartCoreLaunchPlan() async -> CoreLaunchPlan? {
@@ -468,25 +458,35 @@ extension AppSession {
         _ plan: CoreLaunchPlan,
         trigger: ProviderRefreshTrigger) async throws
     {
-        _ = try await self.restartCoreUseCase.execute(
-            configPath: plan.launchContext.configPath,
-            controller: plan.launchContext.launchController)
+        let bootstrapOptions = self.resolveCoreBootstrapOptionsUseCase.execute(.restart(trigger: trigger))
+        try await self.executeCoreLaunchPlan(
+            plan,
+            bootstrapOptions: bootstrapOptions,
+            launchOperation: {
+                _ = try await self.restartCoreUseCase.execute(
+                    configPath: plan.launchContext.configPath,
+                    controller: plan.launchContext.launchController)
+            })
+    }
+
+    private func executeCoreLaunchPlan(
+        _ plan: CoreLaunchPlan,
+        bootstrapOptions: CoreBootstrapOptionsPlan,
+        preLaunch: () -> Void = {},
+        launchOperation: () async throws -> Void) async throws
+    {
+        preLaunch()
+        try await launchOperation()
         await self.completeCoreBootstrap(
             configPath: plan.launchContext.configPath,
             settingsOverlay: plan.settingsOverlay,
-            options: CoreBootstrapOptions(
-                overlaySyncingKey: "restart-overlay",
-                providerTrigger: trigger,
-                refreshProxyGroupsAfterBootstrap: true,
-                refreshSystemProxyBeforeOverlay: false,
-                refreshSystemProxyAfterBootstrap: true,
-                autoTestGroupLatencies: false))
+            options: bootstrapOptions)
     }
 
     private func completeCoreBootstrap(
         configPath: String,
         settingsOverlay: EditableSettingsSnapshot,
-        options: CoreBootstrapOptions) async
+        options: CoreBootstrapOptionsPlan) async
     {
         self.applyCoreBootstrapRunningState()
         await self.performCoreBootstrapInitialRefresh()
@@ -572,23 +572,15 @@ extension AppSession {
         guard requested else { return false }
 
         do {
-            let runtimeConfig = try await self.fetchRuntimeConfigSnapshot()
-            if runtimeConfig.tunEnabled != true {
-                try await self.patchTunConfig(enable: true)
-                try await self.verifyTunRuntimeState(expectedEnabled: true)
-            } else if !self.isTunEnabled {
+            guard try await self.ensureTunRuntimeEnabledForRecovery() else {
                 return false
             }
         } catch {
-            self.appendLog(
-                level: "error",
-                message: self.tr("log.tun.toggle_failed", self.tunErrorMessage(error)))
+            self.handleTunFeatureRecoveryFailure(error)
             return false
         }
 
-        self.isTunEnabled = true
-        self.persistEditableSettingsSnapshot()
-        self.appendLog(level: "info", message: self.tr("log.tun.toggled", self.tr("log.tun.enabled")))
+        self.completeTunFeatureRecovery()
         return true
     }
 
@@ -606,24 +598,57 @@ extension AppSession {
             if !isAlreadyConfigured {
                 try await self.applySystemProxy(enabled: true, host: target.host, ports: target.ports)
             }
-            self.isSystemProxyEnabled = true
-            self.clearSystemProxyOpenFailureHint()
-            self.systemProxyActiveDisplay = self.buildSystemProxyDisplayString(
+            self.completeSystemProxyFeatureRecovery(
                 host: target.host,
                 ports: target.ports)
-            self.appendLog(
-                level: "info",
-                message: self.tr("log.system_proxy.toggled", self.tr("log.system_proxy.enabled")))
             return true
         } catch {
-            self.appendLog(
-                level: "error",
-                message: self.tr("log.system_proxy.toggle_failed", self.systemProxyErrorMessage(error)))
-            self.updateSystemProxyOpenFailureHint(for: error)
-            await self.refreshSystemProxyHelperStatus()
-            await self.refreshSystemProxyStatus()
+            await self.handleSystemProxyFeatureRecoveryFailure(error)
             return false
         }
+    }
+
+    private func ensureTunRuntimeEnabledForRecovery() async throws -> Bool {
+        let runtimeConfig = try await self.fetchRuntimeConfigSnapshot()
+        if runtimeConfig.tunEnabled != true {
+            try await self.patchTunConfig(enable: true)
+            try await self.verifyTunRuntimeState(expectedEnabled: true)
+            return true
+        }
+
+        return self.isTunEnabled
+    }
+
+    private func completeTunFeatureRecovery() {
+        self.isTunEnabled = true
+        self.persistEditableSettingsSnapshot()
+        self.appendLog(level: "info", message: self.tr("log.tun.toggled", self.tr("log.tun.enabled")))
+    }
+
+    private func handleTunFeatureRecoveryFailure(_ error: Error) {
+        self.appendLog(
+            level: "error",
+            message: self.tr("log.tun.toggle_failed", self.tunErrorMessage(error)))
+    }
+
+    private func completeSystemProxyFeatureRecovery(host: String, ports: SystemProxyPorts) {
+        self.isSystemProxyEnabled = true
+        self.clearSystemProxyOpenFailureHint()
+        self.systemProxyActiveDisplay = self.buildSystemProxyDisplayString(
+            host: host,
+            ports: ports)
+        self.appendLog(
+            level: "info",
+            message: self.tr("log.system_proxy.toggled", self.tr("log.system_proxy.enabled")))
+    }
+
+    private func handleSystemProxyFeatureRecoveryFailure(_ error: Error) async {
+        self.appendLog(
+            level: "error",
+            message: self.tr("log.system_proxy.toggle_failed", self.systemProxyErrorMessage(error)))
+        self.updateSystemProxyOpenFailureHint(for: error)
+        await self.refreshSystemProxyHelperStatus()
+        await self.refreshSystemProxyStatus()
     }
 
     private func applyCoreBootstrapRunningState() {
@@ -650,7 +675,7 @@ extension AppSession {
         await self.verifyTunAfterOverlayIfNeeded(overlay: settingsOverlay)
     }
 
-    private func performCoreBootstrapProviderRefresh(_ options: CoreBootstrapOptions) async {
+    private func performCoreBootstrapProviderRefresh(_ options: CoreBootstrapOptionsPlan) async {
         enqueueProviderRefresh(trigger: options.providerTrigger)
 
         if options.refreshProxyGroupsAfterBootstrap {
@@ -658,7 +683,7 @@ extension AppSession {
         }
     }
 
-    private func scheduleSystemProxyBootstrapPostflight(_ options: CoreBootstrapOptions) {
+    private func scheduleSystemProxyBootstrapPostflight(_ options: CoreBootstrapOptionsPlan) {
         // Keep startup responsive even when helper registration or system proxy reads are slow.
         scheduleSystemProxyStartupPostflight(
             refreshStatusBeforeOverlay: options.refreshSystemProxyBeforeOverlay,
@@ -672,7 +697,7 @@ extension AppSession {
         enforceNetworkManagedCorePolicyIfNeeded()
     }
 
-    private func scheduleBootstrapGroupLatencyRefreshIfNeeded(_ options: CoreBootstrapOptions) {
+    private func scheduleBootstrapGroupLatencyRefreshIfNeeded(_ options: CoreBootstrapOptionsPlan) {
         guard options.autoTestGroupLatencies else { return }
 
         Task { [weak self] in
