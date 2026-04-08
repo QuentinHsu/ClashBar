@@ -2,6 +2,10 @@ import Foundation
 
 @MainActor
 extension AppSession {
+    private var resolveNetworkRecoveryActionUseCase: ResolveNetworkRecoveryActionUseCase {
+        ResolveNetworkRecoveryActionUseCase()
+    }
+
     func enforceNetworkManagedCorePolicyIfNeeded() {
         guard self.autoManageCoreOnNetworkChangeEnabled else { return }
         if self.networkReachabilityStatus == .offline {
@@ -116,42 +120,47 @@ extension AppSession {
 
             for _ in 0..<120 {
                 if Task.isCancelled { return }
-                guard self.autoManageCoreOnNetworkChangeEnabled else { return }
-                guard self.networkReachabilityStatus == .online else { return }
-                guard self.shouldResumeCoreAfterNetworkRecovery else { return }
-
-                if self.isCoreActionProcessing {
+                switch self.resolveNetworkRecoveryActionUseCase.execute(.init(
+                    autoManageCoreOnNetworkChangeEnabled: self.autoManageCoreOnNetworkChangeEnabled,
+                    networkReachabilityStatus: self.networkReachabilityStatus,
+                    shouldResumeCoreAfterNetworkRecovery: self.shouldResumeCoreAfterNetworkRecovery,
+                    isCoreActionProcessing: self.isCoreActionProcessing,
+                    isRuntimeRunning: self.isRuntimeRunning,
+                    hasPendingFeatureRecovery: self.pendingCoreFeatureRecoveryState?.shouldRecoverAnyFeature == true))
+                {
+                case .stop:
+                    return
+                case .waitForCurrentCoreAction:
                     do {
                         try await Task.sleep(nanoseconds: 250_000_000)
                     } catch {
                         return
                     }
                     continue
-                }
-
-                if self.isRuntimeRunning {
-                    if self.pendingCoreFeatureRecoveryState?.shouldRecoverAnyFeature == true {
-                        await self.restoreCoreFeaturesAfterStartupIfNeeded()
-                    }
+                case .complete:
                     self.shouldResumeCoreAfterNetworkRecovery = false
                     return
-                }
-
-                self.shouldResumeCoreAfterNetworkRecovery = false
-                if !didLog {
-                    didLog = true
-                    self.appendLog(level: "info", message: self.tr("log.network.online_auto_start"))
-                }
-                await self.startCore(trigger: .networkRecovery)
-                if self.isRuntimeRunning {
+                case .restorePendingFeatures:
+                    await self.restoreCoreFeaturesAfterStartupIfNeeded()
+                    self.shouldResumeCoreAfterNetworkRecovery = false
                     return
-                }
+                case .startCore:
+                    self.shouldResumeCoreAfterNetworkRecovery = false
+                    if !didLog {
+                        didLog = true
+                        self.appendLog(level: "info", message: self.tr("log.network.online_auto_start"))
+                    }
+                    await self.startCore(trigger: .networkRecovery)
+                    if self.isRuntimeRunning {
+                        return
+                    }
 
-                self.shouldResumeCoreAfterNetworkRecovery = true
-                do {
-                    try await Task.sleep(nanoseconds: 500_000_000)
-                } catch {
-                    return
+                    self.shouldResumeCoreAfterNetworkRecovery = true
+                    do {
+                        try await Task.sleep(nanoseconds: 500_000_000)
+                    } catch {
+                        return
+                    }
                 }
             }
         }
