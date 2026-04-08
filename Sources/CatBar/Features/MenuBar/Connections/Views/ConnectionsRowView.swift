@@ -1,6 +1,12 @@
 import SwiftUI
 
 extension MenuBarRootView {
+    struct ConnectionRowActionLabels {
+        let closeConnection: String
+        let copyHost: String
+        let copyConnectionID: String
+    }
+
     struct ConnectionRowDisplayModel {
         let id: String
         let symbolName: String
@@ -18,6 +24,41 @@ extension MenuBarRootView {
         let downText: String
         let chainParts: [String]
         let hovered: Bool
+    }
+
+    struct ConnectionInteractiveRowView: View {
+        let model: ConnectionRowDisplayModel
+        let actionLabels: ConnectionRowActionLabels
+        let primaryLabel: Color
+        let secondaryLabel: Color
+        let tertiaryLabel: Color
+        let infoColor: Color
+        let positiveColor: Color
+        let hoverFill: Color
+        let onHoverChanged: (Bool) -> Void
+        let onClose: () -> Void
+        let onCopyHost: (() -> Void)?
+        let onCopyConnectionID: () -> Void
+
+        var body: some View {
+            ConnectionRowView(
+                model: self.model,
+                primaryLabel: self.primaryLabel,
+                secondaryLabel: self.secondaryLabel,
+                tertiaryLabel: self.tertiaryLabel,
+                infoColor: self.infoColor,
+                positiveColor: self.positiveColor,
+                hoverFill: self.hoverFill,
+                onClose: self.onClose)
+            .onHover(perform: self.onHoverChanged)
+            .contextMenu {
+                ConnectionRowContextMenu(
+                    actionLabels: self.actionLabels,
+                    onClose: self.onClose,
+                    onCopyHost: self.onCopyHost,
+                    onCopyConnectionID: self.onCopyConnectionID)
+            }
+        }
     }
 
     struct ConnectionRowView: View {
@@ -165,6 +206,29 @@ extension MenuBarRootView {
                 .truncationMode(.middle)
                 .minimumScaleFactor(MenuBarLayoutTokens.minimumScale)
                 .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+
+    private struct ConnectionRowContextMenu: View {
+        let actionLabels: ConnectionRowActionLabels
+        let onClose: () -> Void
+        let onCopyHost: (() -> Void)?
+        let onCopyConnectionID: () -> Void
+
+        var body: some View {
+            Button(role: .destructive, action: self.onClose) {
+                Label(self.actionLabels.closeConnection, systemImage: "xmark.circle")
+            }
+
+            if let onCopyHost {
+                Button(action: onCopyHost) {
+                    Label(self.actionLabels.copyHost, systemImage: "doc.on.doc")
+                }
+            }
+
+            Button(action: self.onCopyConnectionID) {
+                Label(self.actionLabels.copyConnectionID, systemImage: "number")
+            }
         }
     }
 }

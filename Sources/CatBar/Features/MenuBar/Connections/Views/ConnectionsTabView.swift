@@ -142,19 +142,31 @@ extension MenuBarRootView {
 
     func connectionRow(_ conn: ConnectionSummary) -> some View {
         let model = self.connectionRowDisplayModel(conn)
+        let resolvedHost = appSession.resolvedConnectionHost(for: conn)
 
-        return ConnectionRowView(
+        return ConnectionInteractiveRowView(
             model: model,
+            actionLabels: .init(
+                closeConnection: tr("ui.action.close_connection"),
+                copyHost: tr("ui.action.copy_host"),
+                copyConnectionID: tr("ui.action.copy_connection_id")),
             primaryLabel: self.nativePrimaryLabel,
             secondaryLabel: self.nativeSecondaryLabel,
             tertiaryLabel: self.nativeTertiaryLabel,
             infoColor: self.nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid),
             positiveColor: self.nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid),
             hoverFill: self.nativeHoverFill,
-            onClose: { Task { await appSession.closeConnection(id: conn.id) } })
-        .onHover { self.connectionsViewModel.hoveredConnectionID = self.nextHovered(
-            current: self.connectionsViewModel.hoveredConnectionID, target: conn.id, isHovering: $0) }
-        .contextMenu { self.connectionRowContextMenu(conn) }
+            onHoverChanged: { isHovering in
+                self.connectionsViewModel.hoveredConnectionID = self.nextHovered(
+                    current: self.connectionsViewModel.hoveredConnectionID,
+                    target: conn.id,
+                    isHovering: isHovering)
+            },
+            onClose: { Task { await appSession.closeConnection(id: conn.id) } },
+            onCopyHost: resolvedHost.map { host in
+                { appSession.copyConnectionHost(host) }
+            },
+            onCopyConnectionID: { appSession.copyConnectionID(conn.id) })
     }
 
     private func connectionRowDisplayModel(_ conn: ConnectionSummary) -> ConnectionRowDisplayModel {
@@ -208,56 +220,6 @@ extension MenuBarRootView {
         case "TCP": return nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid)
         default: return nativeSecondaryLabel
         }
-    }
-
-    @ViewBuilder
-    private func connectionRowContextMenu(_ conn: ConnectionSummary) -> some View {
-        Button(role: .destructive) {
-            Task { await appSession.closeConnection(id: conn.id) }
-        } label: {
-            Label(tr("ui.action.close_connection"), systemImage: "xmark.circle")
-        }
-
-        if let host = appSession.resolvedConnectionHost(for: conn) {
-            Button {
-                appSession.copyConnectionHost(host)
-            } label: {
-                Label(tr("ui.action.copy_host"), systemImage: "doc.on.doc")
-            }
-        }
-
-        Button {
-            appSession.copyConnectionID(conn.id)
-        } label: {
-            Label(tr("ui.action.copy_connection_id"), systemImage: "number")
-        }
-    }
-
-    func connectionsMetricColumn(
-        symbol: String,
-        text: String,
-        symbolColor: Color = .secondary,
-        textColor: Color = .secondary,
-        fallback: String? = nil,
-        spacing: CGFloat = MenuBarLayoutTokens.space2,
-        truncation: Text.TruncationMode = .middle,
-        width: CGFloat) -> some View
-    {
-        let renderedText = text.isEmpty ? (fallback ?? "") : text
-
-        return HStack(spacing: spacing) {
-            Image(systemName: symbol)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .semibold))
-                .foregroundStyle(symbolColor)
-                .frame(width: 10, alignment: .leading)
-            Text(renderedText)
-                .font(.app(size: MenuBarLayoutTokens.FontSize.caption, weight: .regular))
-                .foregroundStyle(textColor)
-                .lineLimit(1)
-                .truncationMode(truncation)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(width: width, alignment: .leading)
     }
 
     func connectionsMonospacedTextWidth(_ text: String, size: CGFloat, weight: NSFont.Weight) -> CGFloat {
