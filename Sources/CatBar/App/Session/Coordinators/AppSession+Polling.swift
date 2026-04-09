@@ -102,7 +102,7 @@ extension AppSession {
         self.scheduleRefreshForActivatedTab(tab)
     }
 
-    private func scheduleRefreshForActivatedTab(_ tab: RootTab) {
+    func scheduleRefreshForActivatedTab(_ tab: RootTab) {
         activatedTabRefreshGeneration += 1
         let generation = activatedTabRefreshGeneration
         Task { [weak self] in
@@ -127,7 +127,7 @@ extension AppSession {
             backgroundLowFrequencyIntervalNanoseconds: self.backgroundLowFrequencyIntervalNanoseconds))
     }
 
-    func updateDataAcquisitionPolicy() {
+    func updateDataAcquisitionPolicy(forceRestartEnabledStreams: Bool = false) {
         guard self.isRemoteTarget || self.coreRepository.isRunning else {
             self.ensurePeriodicTasksForCurrentVisibility()
             mediumFrequencyIntervalNanoseconds = foregroundMediumFrequencyIntervalNanoseconds
@@ -142,7 +142,7 @@ extension AppSession {
         mediumFrequencyIntervalNanoseconds = policy.mediumFrequencyIntervalNanoseconds
         lowFrequencyIntervalNanoseconds = policy.lowFrequencyIntervalNanoseconds
         self.ensurePeriodicTasksForCurrentVisibility()
-        self.applyStreamPolicy(policy)
+        self.applyStreamPolicy(policy, forceRestartEnabledStreams: forceRestartEnabledStreams)
     }
 
     func refreshForActivatedTab(_ tab: RootTab, generation: Int? = nil) async {
@@ -351,26 +351,51 @@ extension AppSession {
         }
     }
 
-    private func applyStreamPolicy(_ policy: DataAcquisitionPolicy) {
-        self.syncStream(.traffic, enabled: policy.enableTrafficStream) { startTrafficStream() }
-        self.syncStream(.memory, enabled: policy.enableMemoryStream) { startMemoryStream() }
+    private func applyStreamPolicy(
+        _ policy: DataAcquisitionPolicy,
+        forceRestartEnabledStreams: Bool = false)
+    {
+        self.syncStream(
+            .traffic,
+            enabled: policy.enableTrafficStream,
+            forceRestart: forceRestartEnabledStreams,
+            staleAfter: self.streamStaleInterval(for: .traffic, connectionsIntervalMilliseconds: nil))
+        {
+            startTrafficStream()
+        }
+        self.syncStream(
+            .memory,
+            enabled: policy.enableMemoryStream,
+            forceRestart: forceRestartEnabledStreams,
+            staleAfter: self.streamStaleInterval(for: .memory, connectionsIntervalMilliseconds: nil))
+        {
+            startMemoryStream()
+        }
         self.syncConnectionsStream(
             enabled: policy.enableConnectionsStream,
-            intervalMilliseconds: policy.connectionsIntervalMilliseconds)
+            intervalMilliseconds: policy.connectionsIntervalMilliseconds,
+            forceRestart: forceRestartEnabledStreams)
         self.syncStream(
             .logs,
             enabled: policy.enableLogsStream,
-            forceRestart: currentLogsStreamLevel != logsStreamLevelFilter())
+            forceRestart: forceRestartEnabledStreams || currentLogsStreamLevel != logsStreamLevelFilter())
         {
             startLogsStream()
         }
     }
 
-    private func syncConnectionsStream(enabled: Bool, intervalMilliseconds: Int?) {
+    private func syncConnectionsStream(
+        enabled: Bool,
+        intervalMilliseconds: Int?,
+        forceRestart: Bool = false)
+    {
         self.syncStream(
             .connections,
             enabled: enabled,
-            forceRestart: currentConnectionsStreamIntervalMilliseconds != intervalMilliseconds)
+            forceRestart: forceRestart || currentConnectionsStreamIntervalMilliseconds != intervalMilliseconds,
+            staleAfter: self.streamStaleInterval(
+                for: .connections,
+                connectionsIntervalMilliseconds: intervalMilliseconds))
         {
             startConnectionsStream(intervalMilliseconds: intervalMilliseconds)
         }
@@ -380,13 +405,40 @@ extension AppSession {
         _ kind: StreamKind,
         enabled: Bool,
         forceRestart: Bool = false,
+        staleAfter: TimeInterval? = nil,
         start: () -> Void)
     {
         guard enabled else {
             cancelStream(kind)
             return
         }
-        guard forceRestart || webSocketTask(for: kind) == nil else { return }
+
+        let shouldRestart = self.shouldRestartStreamUseCase.execute(.init(
+            enabled: enabled,
+            forceRestart: forceRestart,
+            taskExists: self.webSocketTask(for: kind) != nil,
+            lastPayloadAt: self.streamLastPayloadAt(for: kind),
+            now: Date(),
+            staleAfter: staleAfter))
+
+        guard shouldRestart else { return }
         start()
+    }
+
+    private func streamStaleInterval(
+        for kind: StreamKind,
+        connectionsIntervalMilliseconds: Int?) -> TimeInterval?
+    {
+        switch kind {
+        case .traffic:
+            return 6
+        case .memory:
+            return 12
+        case .connections:
+            let intervalSeconds = Double(connectionsIntervalMilliseconds ?? 1_000) / 1_000
+            return max(6, intervalSeconds * 4)
+        case .logs:
+            return nil
+        }
     }
 }

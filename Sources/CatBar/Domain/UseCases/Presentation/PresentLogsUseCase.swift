@@ -1,6 +1,8 @@
 import Foundation
 
 struct PresentLogsUseCase {
+    private static let retainedLogLimit = 120
+
     struct Input {
         let logs: [AppErrorLogEntry]
         let selectedSources: Set<AppLogSource>
@@ -12,23 +14,36 @@ struct PresentLogsUseCase {
     }
 
     func execute(_ input: Input) -> [AppErrorLogEntry] {
-        let source = input.logs.prefix(120)
+        let source = input.logs.prefix(Self.retainedLogLimit)
         let trimmedKeyword = input.searchText.trimmed
-        let isShowingAllSources = input.selectedSources.isEmpty
-        let isShowingAllLevels = input.selectedLevels.isEmpty
+        let needsSourceFilter = !input.selectedSources.isEmpty
+        let needsLevelFilter = !input.selectedLevels.isEmpty
+        let needsSearch = !trimmedKeyword.isEmpty
 
-        if trimmedKeyword.isEmpty, isShowingAllSources, isShowingAllLevels {
+        if !needsSearch, !needsSourceFilter, !needsLevelFilter {
             return Array(source)
         }
 
-        return source.filter { log in
-            guard isShowingAllSources || input.selectedSources.contains(log.source) else { return false }
-            guard trimmedKeyword.isEmpty || input.searchTextContent(log).localizedStandardContains(trimmedKeyword)
-            else {
-                return false
+        var presented: [AppErrorLogEntry] = []
+        presented.reserveCapacity(min(input.logs.count, Self.retainedLogLimit))
+
+        for log in source {
+            if needsSourceFilter, !input.selectedSources.contains(log.source) {
+                continue
             }
-            return isShowingAllLevels || input.selectedLevels
-                .contains(input.levelFilter(input.normalizedLevel(log.level)))
+            if needsSearch, !input.searchTextContent(log).localizedStandardContains(trimmedKeyword) {
+                continue
+            }
+            if needsLevelFilter {
+                let normalizedLevel = input.normalizedLevel(log.level)
+                let levelFilter = input.levelFilter(normalizedLevel)
+                if !input.selectedLevels.contains(levelFilter) {
+                    continue
+                }
+            }
+            presented.append(log)
         }
+
+        return presented
     }
 }

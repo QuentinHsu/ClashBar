@@ -7,21 +7,32 @@ struct PresentRulesOutput {
 
 struct PresentRulesUseCase {
     func execute(items: [RuleItem], providers: [String: ProviderDetail]) -> PresentRulesOutput {
-        let truncated = items.prefix(100)
+        let truncated = items.prefix(RulesSummary.retainedRuleLimit)
 
-        var order: [String] = []
-        var buckets: [String: [RuleItem]] = [:]
+        var groupIndexes: [String: Int] = [:]
+        groupIndexes.reserveCapacity(truncated.count)
+
+        var orderedPolicies: [String] = []
+        orderedPolicies.reserveCapacity(truncated.count)
+        var groupedRules: [[RuleItem]] = []
+        groupedRules.reserveCapacity(truncated.count)
 
         for rule in truncated {
             let key = rule.proxy ?? ""
-            if buckets[key] == nil {
-                order.append(key)
+            if let index = groupIndexes[key] {
+                groupedRules[index].append(rule)
+            } else {
+                groupIndexes[key] = orderedPolicies.count
+                orderedPolicies.append(key)
+                groupedRules.append([rule])
             }
-            buckets[key, default: []].append(rule)
         }
 
-        let groups = order.map { key in
-            RulePolicyGroup(policy: key, rules: buckets[key] ?? [])
+        var groups: [RulePolicyGroup] = []
+        groups.reserveCapacity(orderedPolicies.count)
+
+        for index in orderedPolicies.indices {
+            groups.append(RulePolicyGroup(policy: orderedPolicies[index], rules: groupedRules[index]))
         }
 
         return PresentRulesOutput(
@@ -30,13 +41,15 @@ struct PresentRulesUseCase {
     }
 
     private func makeProviderLookup(from providers: [String: ProviderDetail]) -> [String: ProviderDetail] {
+        guard !providers.isEmpty else { return [:] }
+
         var map: [String: ProviderDetail] = [:]
         map.reserveCapacity(providers.count * 2)
 
         for (key, detail) in providers {
             map[key.lowercased()] = detail
-            if let name = detail.name.trimmedNonEmpty {
-                map[name.lowercased()] = detail
+            if let normalizedName = detail.name.trimmedNonEmpty?.lowercased() {
+                map[normalizedName] = detail
             }
         }
 

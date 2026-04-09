@@ -8,50 +8,58 @@ struct PresentConnectionsUseCase {
         sortOption: ConnectionsSortOption,
         searchText: (ConnectionSummary) -> String) -> [ConnectionSummary]
     {
-        let source = connections.prefix(120)
+        let source = connections.prefix(ConnectionsSnapshot.retainedConnectionLimit)
         let keyword = filterText.trimmed
+        let needsSearch = !keyword.isEmpty
+        let needsTransportFilter = transportFilter != .all
 
-        let filtered: [ConnectionSummary] = if keyword.isEmpty, transportFilter == .all {
-            Array(source)
+        let filtered: [ConnectionSummary]
+        if !needsSearch, !needsTransportFilter {
+            filtered = Array(source)
         } else {
-            source.filter { connection in
-                guard transportFilter.matches(connection.metadata?.network) else { return false }
-                guard keyword.isEmpty || searchText(connection).localizedStandardContains(keyword) else {
-                    return false
+            var matches: [ConnectionSummary] = []
+            matches.reserveCapacity(min(connections.count, ConnectionsSnapshot.retainedConnectionLimit))
+
+            for connection in source {
+                if needsTransportFilter, !transportFilter.matches(connection.metadata?.network) {
+                    continue
                 }
-                return true
+                if needsSearch, !searchText(connection).localizedStandardContains(keyword) {
+                    continue
+                }
+                matches.append(connection)
             }
+
+            filtered = matches
         }
 
-        return self.sortedConnections(filtered, sortOption: sortOption)
-    }
+        guard sortOption != .default else { return filtered }
 
-    private func sortedConnections(
-        _ source: [ConnectionSummary],
-        sortOption: ConnectionsSortOption) -> [ConnectionSummary]
-    {
+        var sorted = filtered
         switch sortOption {
         case .default:
-            source
+            return sorted
         case .newest:
-            self.connectionsSortedByTimestamp(source, descending: true)
+            self.sortConnectionsByTimestamp(&sorted, descending: true)
         case .oldest:
-            self.connectionsSortedByTimestamp(source, descending: false)
+            self.sortConnectionsByTimestamp(&sorted, descending: false)
         case .uploadDesc:
-            self.connectionsSortedByTraffic(source) { $0.upload ?? 0 }
+            self.sortConnectionsByTraffic(&sorted) { $0.upload ?? 0 }
         case .downloadDesc:
-            self.connectionsSortedByTraffic(source) { $0.download ?? 0 }
+            self.sortConnectionsByTraffic(&sorted) { $0.download ?? 0 }
         case .totalDesc:
-            self.connectionsSortedByTraffic(source) { ($0.upload ?? 0) + ($0.download ?? 0) }
+            self.sortConnectionsByTraffic(&sorted) { ($0.upload ?? 0) + ($0.download ?? 0) }
         }
+
+        return sorted
     }
 
-    private func connectionsSortedByTimestamp(
-        _ source: [ConnectionSummary],
-        descending: Bool) -> [ConnectionSummary]
+    private func sortConnectionsByTimestamp(
+        _ source: inout [ConnectionSummary],
+        descending: Bool)
     {
         let fallback: TimeInterval = descending ? -1 : .greatestFiniteMagnitude
-        return source.sorted { lhs, rhs in
+        source.sort { lhs, rhs in
             let left = lhs.startTimestamp ?? fallback
             let right = rhs.startTimestamp ?? fallback
             if left != right {
@@ -61,11 +69,11 @@ struct PresentConnectionsUseCase {
         }
     }
 
-    private func connectionsSortedByTraffic(
-        _ source: [ConnectionSummary],
-        _ metric: (ConnectionSummary) -> Int64) -> [ConnectionSummary]
+    private func sortConnectionsByTraffic(
+        _ source: inout [ConnectionSummary],
+        _ metric: (ConnectionSummary) -> Int64)
     {
-        source.sorted { lhs, rhs in
+        source.sort { lhs, rhs in
             let left = metric(lhs)
             let right = metric(rhs)
             if left != right {

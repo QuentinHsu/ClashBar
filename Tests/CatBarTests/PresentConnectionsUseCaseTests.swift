@@ -75,6 +75,24 @@ final class PresentConnectionsUseCaseTests: XCTestCase {
         XCTAssertEqual(result.map(\.id), ["large", "tie-newer", "small", "tie-older"])
     }
 
+    func testExecuteDoesNotFilterBeyondRetainedConnectionLimit() {
+        let connections = (0..<121).map { index in
+            self.makeConnection(
+                id: "conn-\(index)",
+                network: "tcp",
+                host: index == 120 ? "match.example.com" : "host-\(index).example.com")
+        }
+
+        let result = self.subject.execute(
+            connections: connections,
+            filterText: "match",
+            transportFilter: .all,
+            sortOption: .default,
+            searchText: { $0.metadata?.host ?? "" })
+
+        XCTAssertTrue(result.isEmpty)
+    }
+
     private func makeConnection(
         id: String,
         network: String,

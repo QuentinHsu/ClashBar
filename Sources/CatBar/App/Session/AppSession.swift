@@ -8,6 +8,10 @@ final class AppSession: ObservableObject {
         ResolveAppLaunchAutoStartUseCase()
     }
 
+    var shouldRestartStreamUseCase: ShouldRestartStreamUseCase {
+        ShouldRestartStreamUseCase()
+    }
+
     @Published private var coreRuntimePresentationState = CoreRuntimePresentationState()
     var localExternalControllerDisplay: String = "127.0.0.1:9090"
 
@@ -883,6 +887,7 @@ final class AppSession: ObservableObject {
     var streamReconnectAttempts: [String: Int] = [:]
     var streamLastDisconnectLogAt: [String: Date] = [:]
     var streamLastDisconnectLogMessage: [String: String] = [:]
+    var streamLastPayloadAt: [String: Date] = [:]
     var proxyPortsAutoSaveTask: Task<Void, Never>?
     var settingsFeedbackClearTask: Task<Void, Never>?
     var providerRefreshTask: Task<Void, Never>?
@@ -963,6 +968,7 @@ final class AppSession: ObservableObject {
     var deferredEditableSettingsOverlay: DeferredEditableSettingsOverlayRequest?
     var remoteConfigSources: [String: String] = [:]
     var externalControllerWarningKeys: Set<String> = []
+    var powerEventObservers: [(center: NotificationCenter, observer: Any)] = []
     let streamJSONDecoder = JSONDecoder()
     let initialNoCoreSetupGuideShownKey = "catbar.core.install.guide.shown.v1"
     let bundlesMihomoCore: Bool
@@ -1128,25 +1134,29 @@ final class AppSession: ObservableObject {
         }
 
         self.updateNetworkReachabilityMonitoringState()
+        self.startPowerEventMonitoringIfNeeded()
         self.refreshMenuBarDisplaySnapshotIfNeeded()
     }
 
     deinit {
-        networkAutoStopTask?.cancel()
-        networkAutoStartTask?.cancel()
-        deferredEditableSettingsOverlayTask?.cancel()
-        configDirectoryMonitorTask?.cancel()
-        trafficDecodeTask?.cancel()
-        mihomoLogFlushTask?.cancel()
-        mediumFrequencyTask?.cancel()
-        lowFrequencyTask?.cancel()
-        for task in streamReceiveTasks.values {
-            task.cancel()
+        MainActor.assumeIsolated {
+            self.stopPowerEventMonitoring()
+            networkAutoStopTask?.cancel()
+            networkAutoStartTask?.cancel()
+            deferredEditableSettingsOverlayTask?.cancel()
+            configDirectoryMonitorTask?.cancel()
+            trafficDecodeTask?.cancel()
+            mihomoLogFlushTask?.cancel()
+            mediumFrequencyTask?.cancel()
+            lowFrequencyTask?.cancel()
+            for task in streamReceiveTasks.values {
+                task.cancel()
+            }
+            for webSocketTask in streamWebSocketTasks.values {
+                webSocketTask.cancel(with: .goingAway, reason: nil)
+            }
+            providerRefreshTask?.cancel()
         }
-        for webSocketTask in streamWebSocketTasks.values {
-            webSocketTask.cancel(with: .goingAway, reason: nil)
-        }
-        providerRefreshTask?.cancel()
     }
 
     private static func resolveBundledMihomoCoreFlag() -> Bool {

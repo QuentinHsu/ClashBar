@@ -305,10 +305,16 @@ extension AppSession {
         streamReconnectAttempts.removeValue(forKey: kind.key)
         streamLastDisconnectLogAt.removeValue(forKey: kind.key)
         streamLastDisconnectLogMessage.removeValue(forKey: kind.key)
+        streamLastPayloadAt.removeValue(forKey: kind.key)
     }
 
     private func markStreamPayloadReceived(for kind: StreamKind) {
         streamReconnectAttempts[kind.key] = 0
+        streamLastPayloadAt[kind.key] = Date()
+    }
+
+    func streamLastPayloadAt(for kind: StreamKind) -> Date? {
+        self.streamLastPayloadAt[kind.key]
     }
 
     private func nextReconnectDelayNanoseconds(for kind: StreamKind) -> UInt64 {

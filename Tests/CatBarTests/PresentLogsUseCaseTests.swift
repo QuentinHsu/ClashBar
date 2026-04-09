@@ -38,6 +38,19 @@ final class PresentLogsUseCaseTests: XCTestCase {
         XCTAssertEqual(result.map(\.message), ["rule hit example.com"])
     }
 
+    func testExecuteDoesNotSearchBeyondRetainedLogLimit() {
+        let logs = (0..<121).map { index in
+            AppErrorLogEntry(
+                source: .catbar,
+                level: "info",
+                message: index == 120 ? "match-me" : "message-\(index)")
+        }
+
+        let result = self.subject.execute(self.makeInput(logs: logs, searchText: "match"))
+
+        XCTAssertTrue(result.isEmpty)
+    }
+
     private func makeInput(
         logs: [AppErrorLogEntry],
         selectedSources: Set<AppLogSource> = [],
