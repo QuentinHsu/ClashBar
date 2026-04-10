@@ -36,6 +36,30 @@ extension MenuBarRootView {
             minimumPayloadWidth: ConnectionsLayout.topPayloadMinWidth)
     }
 
+    private var connectionRowPresentationResolver: ConnectionRowPresentationResolver {
+        ConnectionRowPresentationResolver(
+            ruleResolver: self.connectionRulePresentationResolver,
+            layoutResolver: self.connectionsTopLineLayoutResolver,
+            rowContentWidth: ConnectionsLayout.rowContentWidth,
+            minimumRuleWidth: ConnectionsLayout.topRuleMinWidth,
+            minimumPayloadWidth: ConnectionsLayout.topPayloadMinWidth,
+            measureRuleWidth: {
+                self.connectionsMonospacedTextWidth(
+                    $0,
+                    size: MenuBarLayoutTokens.FontSize.caption,
+                    weight: .semibold)
+            },
+            measurePayloadWidth: {
+                self.connectionsMonospacedTextWidth(
+                    $0,
+                    size: MenuBarLayoutTokens.FontSize.caption,
+                    weight: .medium)
+            },
+            fallbackHostText: tr("ui.common.na"),
+            formatTimeText: { self.connectionTimeOnly($0) },
+            formatTrafficText: { ValueFormatter.bytesCompactNoSpace($0) })
+    }
+
     @ViewBuilder
     var connectionsTabBody: some View {
         let connections = self.connectionsViewModel.visibleConnections
@@ -141,7 +165,8 @@ extension MenuBarRootView {
     }
 
     func connectionRow(_ conn: ConnectionSummary) -> some View {
-        let model = self.connectionRowDisplayModel(conn)
+        let presentation = self.connectionRowPresentationResolver.resolve(conn)
+        let model = self.connectionRowDisplayModel(conn, presentation: presentation)
         let resolvedHost = appSession.resolvedConnectionHost(for: conn)
 
         return ConnectionInteractiveRowView(
@@ -169,56 +194,37 @@ extension MenuBarRootView {
             onCopyConnectionID: { appSession.copyConnectionID(conn.id) })
     }
 
-    private func connectionRowDisplayModel(_ conn: ConnectionSummary) -> ConnectionRowDisplayModel {
-        let visual = self.connectionVisual(for: conn)
-        let parsedRule = self.connectionRulePresentationResolver.parseRule(conn.rule)
-        let ruleTypeText = self.connectionRulePresentationResolver.ruleTypeText(
-            raw: conn.rule,
-            fallback: parsedRule?.type)
-        let rulePayloadText = conn.rulePayload.trimmedNonEmpty
-            ?? parsedRule?.payload?.trimmedNonEmpty
-            ?? "--"
-        let layout = self.connectionsTopLineLayoutResolver.resolve(
-            totalWidth: ConnectionsLayout.rowContentWidth,
-            desiredRuleWidth: max(
-                ConnectionsLayout.topRuleMinWidth,
-                self.connectionsMonospacedTextWidth(
-                    ruleTypeText,
-                    size: MenuBarLayoutTokens.FontSize.caption,
-                    weight: .semibold) + 4),
-            desiredPayloadWidth: max(
-                ConnectionsLayout.topPayloadMinWidth,
-                self.connectionsMonospacedTextWidth(
-                    rulePayloadText,
-                    size: MenuBarLayoutTokens.FontSize.caption,
-                    weight: .medium)))
-
+    private func connectionRowDisplayModel(
+        _ conn: ConnectionSummary,
+        presentation: ConnectionRowPresentation) -> ConnectionRowDisplayModel
+    {
         return ConnectionRowDisplayModel(
             id: conn.id,
-            symbolName: visual.symbol,
-            symbolColor: visual.color,
-            hostText: conn.metadata?.host.trimmedNonEmpty
-                ?? conn.metadata?.destinationIP.trimmedNonEmpty
-                ?? tr("ui.common.na"),
-            ruleTypeText: ruleTypeText,
-            rulePayloadText: rulePayloadText,
-            hostWidth: layout.hostWidth,
-            ruleWidth: layout.ruleWidth,
-            payloadWidth: layout.payloadWidth,
-            timeText: self.connectionTimeOnly(conn.start),
-            networkText: conn.metadata?.network.trimmedNonEmpty?.uppercased() ?? "--",
-            networkColor: self.connectionNetworkColor(conn.metadata?.network.trimmedNonEmpty?.uppercased() ?? "--"),
-            upText: ValueFormatter.bytesCompactNoSpace(conn.upload ?? 0),
-            downText: ValueFormatter.bytesCompactNoSpace(conn.download ?? 0),
-            chainParts: self.connectionRulePresentationResolver.chainsParts(conn.chains),
+            symbolName: presentation.visualStyle.symbolName,
+            symbolColor: self.connectionVisualColor(presentation.visualStyle),
+            hostText: presentation.hostText,
+            ruleTypeText: presentation.ruleTypeText,
+            rulePayloadText: presentation.rulePayloadText,
+            hostWidth: presentation.layout.hostWidth,
+            ruleWidth: presentation.layout.ruleWidth,
+            payloadWidth: presentation.layout.payloadWidth,
+            timeText: presentation.timeText,
+            networkText: presentation.networkText,
+            networkColor: self.connectionNetworkColor(presentation.networkStyle),
+            upText: presentation.upText,
+            downText: presentation.downText,
+            chainParts: presentation.chainParts,
             hovered: self.connectionsViewModel.hoveredConnectionID == conn.id)
     }
 
-    private func connectionNetworkColor(_ network: String) -> Color {
-        switch network.uppercased() {
-        case "UDP": return nativeWarning.opacity(MenuBarLayoutTokens.Opacity.solid)
-        case "TCP": return nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid)
-        default: return nativeSecondaryLabel
+    private func connectionNetworkColor(_ style: ConnectionNetworkStyle) -> Color {
+        switch style {
+        case .udp:
+            nativeWarning.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case .tcp:
+            nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case .other:
+            nativeSecondaryLabel
         }
     }
 
@@ -241,31 +247,24 @@ extension MenuBarRootView {
         return full.split(separator: " ").last.map(String.init) ?? full
     }
 
-    func connectionVisual(for conn: ConnectionSummary) -> (symbol: String, color: Color) {
-        let host = conn.metadata?.host?.lowercased() ?? ""
-        let network = conn.metadata?.network?.lowercased() ?? ""
-
-        if host.contains("google") || host.contains("gstatic") {
-            return ("shield.fill", nativePurple.opacity(MenuBarLayoutTokens.Opacity.solid))
+    private func connectionVisualColor(_ style: ConnectionVisualStyle) -> Color {
+        switch style {
+        case .google:
+            nativePurple.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case .apple:
+            nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case .github:
+            nativeIndigo.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case .twitter:
+            nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case .amazon:
+            nativeWarning.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case .udp:
+            nativeTeal.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case .tcp:
+            nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid)
+        case .generic:
+            nativeSecondaryLabel
         }
-        if host.contains("icloud") || host.contains("apple") {
-            return ("icloud.fill", nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid))
-        }
-        if host.contains("github") {
-            return ("terminal.fill", nativeIndigo.opacity(MenuBarLayoutTokens.Opacity.solid))
-        }
-        if host.contains("twitter") || host.contains("x.com") {
-            return ("lock.fill", nativePositive.opacity(MenuBarLayoutTokens.Opacity.solid))
-        }
-        if host.contains("amazon") {
-            return ("cart.fill", nativeWarning.opacity(MenuBarLayoutTokens.Opacity.solid))
-        }
-        if network.contains("udp") {
-            return ("dot.radiowaves.left.and.right", nativeTeal.opacity(MenuBarLayoutTokens.Opacity.solid))
-        }
-        if network.contains("tcp") {
-            return ("network", nativeInfo.opacity(MenuBarLayoutTokens.Opacity.solid))
-        }
-        return ("globe", nativeSecondaryLabel)
     }
 }
