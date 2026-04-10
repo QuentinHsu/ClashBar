@@ -61,4 +61,28 @@ final class NodesTabViewModelTests: XCTestCase {
         XCTAssertEqual(subject.filteredLocalNodes(nodes, searchText: "relay").map(\.name), ["HK Relay"])
         XCTAssertEqual(subject.filteredLocalNodes(nodes, searchText: "VME").map(\.name), ["HK Relay"])
     }
+
+    func testBuildPresentedLocalNodesAppliesSearchDuringConstruction() {
+        let subject = NodesTabViewModel()
+
+        let result = subject.buildPresentedLocalNodes(
+            proxyNodeIDs: [
+                "Tokyo Relay": "tokyo-id",
+                "Osaka Direct": "osaka-id",
+            ],
+            proxyNodeTypes: [
+                "Tokyo Relay": "vmess",
+                "Osaka Direct": "ss",
+            ],
+            proxyProvidersDetail: [:],
+            matcher: subject.searchMatcher(for: "  relay "))
+
+        XCTAssertEqual(result.map(\.name), ["Tokyo Relay"])
+    }
+
+    func testSearchMatcherTreatsWhitespaceOnlyKeywordAsEmpty() {
+        let subject = NodesTabViewModel()
+
+        XCTAssertNil(subject.searchMatcher(for: "   "))
+    }
 }

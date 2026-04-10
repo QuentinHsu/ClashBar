@@ -6,10 +6,12 @@ private typealias T = MenuBarLayoutTokens
 
 extension MenuBarRootView {
     var nodesTabBody: some View {
-        VStack(alignment: .leading, spacing: T.space6) {
+        let searchMatcher = nodesViewModel.searchMatcher(for: nodesViewModel.searchText)
+
+        return VStack(alignment: .leading, spacing: T.space6) {
             self.nodesSearchBar
-            self.remoteNodesSection
-            self.nodesLocalSection()
+            self.remoteNodesSection(searchMatcher: searchMatcher)
+            self.nodesLocalSection(searchMatcher: searchMatcher)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -47,7 +49,7 @@ extension MenuBarRootView {
         .padding(.horizontal, T.space4)
     }
 
-    private var remoteNodesSection: some View {
+    private func remoteNodesSection(searchMatcher: NodesTabViewModel.SearchMatcher?) -> some View {
         let providers = appSession.sortedProxyProviderNames
 
         return VStack(alignment: .leading, spacing: T.space6) {
@@ -63,14 +65,21 @@ extension MenuBarRootView {
             } else {
                 VStack(alignment: .leading, spacing: T.space2) {
                     ForEach(providers, id: \.self) { name in
-                        self.nodesProviderBlock(name: name, detail: appSession.proxyProvidersDetail[name])
+                        self.nodesProviderBlock(
+                            name: name,
+                            detail: appSession.proxyProvidersDetail[name],
+                            searchMatcher: searchMatcher)
                     }
                 }
             }
         }
     }
 
-    private func nodesProviderBlock(name: String, detail: ProviderDetail?) -> some View {
+    private func nodesProviderBlock(
+        name: String,
+        detail: ProviderDetail?,
+        searchMatcher: NodesTabViewModel.SearchMatcher?) -> some View
+    {
         let nodeCount = detail?.proxies?.count ?? 0
         let isUpdating = appSession.providerUpdating.contains(name)
         let isTestingAllNodes = nodesViewModel.providerTestingInProgress.contains(name)
@@ -87,9 +96,7 @@ extension MenuBarRootView {
             let used = upload + download
             return min(max(Double(used) / Double(total), 0), 1)
         }()
-        let filteredNodes = nodesViewModel.filteredProviderNodes(
-            detail?.proxies ?? [],
-            searchText: nodesViewModel.searchText)
+        let filteredNodes = nodesViewModel.filteredProviderNodes(detail?.proxies ?? [], matcher: searchMatcher)
         let updatedTimeWidth: CGFloat = 118
 
         return AttachedPopoverMenu { isHovered in
@@ -297,12 +304,12 @@ extension MenuBarRootView {
         }
     }
 
-    func nodesLocalSection() -> some View {
-        let allLocal = nodesViewModel.buildLocalNodes(
+    func nodesLocalSection(searchMatcher: NodesTabViewModel.SearchMatcher?) -> some View {
+        let filtered = nodesViewModel.buildPresentedLocalNodes(
             proxyNodeIDs: appSession.proxyNodeIDs,
             proxyNodeTypes: appSession.proxyNodeTypes,
-            proxyProvidersDetail: appSession.proxyProvidersDetail)
-        let filtered = nodesViewModel.filteredLocalNodes(allLocal, searchText: nodesViewModel.searchText)
+            proxyProvidersDetail: appSession.proxyProvidersDetail,
+            matcher: searchMatcher)
 
         return VStack(alignment: .leading, spacing: T.space6) {
             self.nodesSectionHeader(

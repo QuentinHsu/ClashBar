@@ -25,10 +25,35 @@ final class NodesTabViewModel: ObservableObject {
         }
     }
 
+    struct SearchMatcher {
+        let keyword: String
+
+        func matches(name: String, type: String?) -> Bool {
+            if name.range(of: self.keyword, options: [.caseInsensitive]) != nil {
+                return true
+            }
+            guard let type else { return false }
+            return type.range(of: self.keyword, options: [.caseInsensitive]) != nil
+        }
+    }
+
     func buildLocalNodes(
         proxyNodeIDs: [String: String],
         proxyNodeTypes: [String: String],
         proxyProvidersDetail: [String: ProviderDetail]) -> [LocalNode]
+    {
+        self.buildPresentedLocalNodes(
+            proxyNodeIDs: proxyNodeIDs,
+            proxyNodeTypes: proxyNodeTypes,
+            proxyProvidersDetail: proxyProvidersDetail,
+            matcher: nil)
+    }
+
+    func buildPresentedLocalNodes(
+        proxyNodeIDs: [String: String],
+        proxyNodeTypes: [String: String],
+        proxyProvidersDetail: [String: ProviderDetail],
+        matcher: SearchMatcher?) -> [LocalNode]
     {
         var providerNodeNames: Set<String> = []
         var providerNodeIDs: Set<String> = []
@@ -43,18 +68,30 @@ final class NodesTabViewModel: ObservableObject {
             }
         }
 
-        return proxyNodeTypes
-            .filter { name, type in
-                let nodeID = proxyNodeIDs[name]
-                return self.isLocalNodeCandidate(
-                    name: name,
-                    type: type,
-                    id: nodeID,
-                    providerNodeNames: providerNodeNames,
-                    providerNodeIDs: providerNodeIDs)
+        var localNodes: [LocalNode] = []
+        localNodes.reserveCapacity(proxyNodeTypes.count)
+
+        for (name, type) in proxyNodeTypes {
+            let nodeID = proxyNodeIDs[name]
+            guard self.isLocalNodeCandidate(
+                name: name,
+                type: type,
+                id: nodeID,
+                providerNodeNames: providerNodeNames,
+                providerNodeIDs: providerNodeIDs)
+            else {
+                continue
             }
-            .map { LocalNode(id: proxyNodeIDs[$0.key], name: $0.key, type: $0.value) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+            let node = LocalNode(id: nodeID, name: name, type: type)
+            if let matcher, !self.matchesSearch(matcher, name: node.name, type: node.type) {
+                continue
+            }
+            localNodes.append(node)
+        }
+
+        localNodes.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return localNodes
     }
 
     private func isLocalNodeCandidate(
@@ -94,30 +131,47 @@ final class NodesTabViewModel: ObservableObject {
         return normalized.isEmpty ? nil : normalized
     }
 
+    func searchMatcher(for searchText: String) -> SearchMatcher? {
+        let keyword = searchText.trimmed
+        guard !keyword.isEmpty else { return nil }
+        return SearchMatcher(keyword: keyword)
+    }
+
     func filteredProviderNodes(_ nodes: [ProviderProxyNode], searchText: String) -> [ProviderProxyNode] {
-        let keyword = self.normalizedSearchKeyword(searchText)
-        guard let keyword else { return nodes }
-        return nodes.filter { node in
-            self.matchesSearchKeyword(keyword, values: [node.name, node.type ?? ""])
+        self.filteredProviderNodes(nodes, matcher: self.searchMatcher(for: searchText))
+    }
+
+    func filteredProviderNodes(_ nodes: [ProviderProxyNode], matcher: SearchMatcher?) -> [ProviderProxyNode] {
+        guard let matcher else { return nodes }
+
+        var filtered: [ProviderProxyNode] = []
+        filtered.reserveCapacity(nodes.count)
+        for node in nodes {
+            if self.matchesSearch(matcher, name: node.name, type: node.type) {
+                filtered.append(node)
+            }
         }
+        return filtered
     }
 
     func filteredLocalNodes(_ nodes: [LocalNode], searchText: String) -> [LocalNode] {
-        let keyword = self.normalizedSearchKeyword(searchText)
-        guard let keyword else { return nodes }
-        return nodes.filter { node in
-            self.matchesSearchKeyword(keyword, values: [node.name, node.type])
-        }
+        self.filteredLocalNodes(nodes, matcher: self.searchMatcher(for: searchText))
     }
 
-    private func normalizedSearchKeyword(_ searchText: String) -> String? {
-        let keyword = searchText.trimmed.lowercased()
-        return keyword.isEmpty ? nil : keyword
+    func filteredLocalNodes(_ nodes: [LocalNode], matcher: SearchMatcher?) -> [LocalNode] {
+        guard let matcher else { return nodes }
+
+        var filtered: [LocalNode] = []
+        filtered.reserveCapacity(nodes.count)
+        for node in nodes {
+            if self.matchesSearch(matcher, name: node.name, type: node.type) {
+                filtered.append(node)
+            }
+        }
+        return filtered
     }
 
-    private func matchesSearchKeyword(_ keyword: String, values: [String]) -> Bool {
-        values.contains { value in
-            value.lowercased().contains(keyword)
-        }
+    private func matchesSearch(_ matcher: SearchMatcher, name: String, type: String?) -> Bool {
+        matcher.matches(name: name, type: type)
     }
 }
