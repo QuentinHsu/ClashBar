@@ -37,23 +37,6 @@ enum MihomoConfigValidationError: LocalizedError {
     }
 }
 
-private final class ProcessOutputBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var data = Data()
-
-    func store(_ data: Data) {
-        self.lock.withLock {
-            self.data = data
-        }
-    }
-
-    func load() -> Data {
-        self.lock.withLock {
-            self.data
-        }
-    }
-}
-
 /// Process callbacks run on system-managed threads. Shared mutable state is guarded by `lock`.
 final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
     private(set) var status: CoreLifecycleStatus = .stopped
@@ -68,6 +51,8 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
     private let lifecycleQueue: DispatchQueue
     private let validationQueue: DispatchQueue
     private let configValidationTimeout: TimeInterval
+    private let launchContextResolver: MihomoLaunchContextResolver
+    private let processWaiter: MihomoProcessWaiter
 
     var onLog: ((String) -> Void)?
     var onTermination: ((Int32) -> Void)?
@@ -86,12 +71,16 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
         workingDirectoryManager: WorkingDirectoryManager = WorkingDirectoryManager(),
         fileManager: FileManager = .default,
         configValidationTimeout: TimeInterval = 10,
+        launchContextResolver: MihomoLaunchContextResolver = MihomoLaunchContextResolver(),
+        processWaiter: MihomoProcessWaiter = MihomoProcessWaiter(),
         lifecycleQueue: DispatchQueue? = nil,
         validationQueue: DispatchQueue? = nil)
     {
         self.workingDirectoryManager = workingDirectoryManager
         self.fileManager = fileManager
         self.configValidationTimeout = configValidationTimeout
+        self.launchContextResolver = launchContextResolver
+        self.processWaiter = processWaiter
         self.lifecycleQueue = lifecycleQueue
             ?? DispatchQueue(label: "com.catbar.mihomo-process.operations", qos: .userInitiated)
         self.validationQueue = validationQueue
@@ -103,67 +92,9 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
     }
 
     func validateConfig(configPath: String) throws {
-        let binary = try resolveMihomoBinary()
-
-        let configFileURL = URL(fileURLWithPath: configPath).standardizedFileURL.resolvingSymlinksInPath()
-        let configDirectoryURL = configFileURL.deletingLastPathComponent()
-        let workingDirectoryURL: URL = if configDirectoryURL.lastPathComponent == "config" {
-            configDirectoryURL.deletingLastPathComponent()
-        } else {
-            configDirectoryURL
-        }
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: binary)
-        proc.currentDirectoryURL = workingDirectoryURL
-        proc.arguments = ["-d", workingDirectoryURL.path, "-f", configPath, "-t"]
-
-        let outputPipe = Pipe()
-        proc.standardOutput = outputPipe
-        proc.standardError = outputPipe
-        let outputBox = ProcessOutputBox()
-        let outputDrainGroup = DispatchGroup()
-        outputDrainGroup.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            outputBox.store(outputData)
-            outputDrainGroup.leave()
-        }
-
-        do {
-            try proc.run()
-        } catch {
-            throw MihomoConfigValidationError.launchFailed("Failed to run mihomo -t: \(error.localizedDescription)")
-        }
-
-        let didExit = self.waitForProcessExit(proc, timeout: self.configValidationTimeout)
-        if !didExit {
-            self.onLog?("[mihomo config test] timeout after \(self.normalizedValidationTimeoutSeconds())s")
-            proc.terminate()
-            if !self.waitForProcessExit(proc, timeout: 1.0) {
-                _ = Darwin.kill(proc.processIdentifier, SIGKILL)
-                _ = self.waitForProcessExit(proc, timeout: 0.5)
-            }
-        }
-
-        _ = outputDrainGroup.wait(timeout: .now() + 1.0)
-        let outputData = outputBox.load()
-        let outputText = String(data: outputData, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        guard didExit else {
-            throw MihomoConfigValidationError.timedOut(
-                seconds: self.normalizedValidationTimeoutSeconds(),
-                details: outputText)
-        }
-
-        guard proc.terminationStatus == 0 else {
-            throw MihomoConfigValidationError.failed(exitCode: proc.terminationStatus, details: outputText)
-        }
-
-        if !outputText.isEmpty {
-            self.onLog?("[mihomo config test] \(outputText)")
-        }
+        let binary = try self.resolveMihomoBinary()
+        let context = self.launchContextResolver.validationContext(binaryPath: binary, configPath: configPath)
+        try self.configValidationRunner.validate(context: context)
     }
 
     func validateConfigAsync(configPath: String) async throws {
@@ -187,23 +118,15 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
             await self.stateActor.setStatus(.starting)
         }
 
-        let binary = try resolveMihomoBinary()
+        let binary = try self.resolveMihomoBinary()
+        let context = self.launchContextResolver.runtimeContext(
+            binaryPath: binary,
+            configPath: configPath,
+            controller: controller)
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: binary)
-
-        let configFileURL = URL(fileURLWithPath: configPath).standardizedFileURL.resolvingSymlinksInPath()
-        let configDirectoryURL = configFileURL.deletingLastPathComponent()
-        let workingDirectoryURL: URL = if configDirectoryURL.lastPathComponent == "config" {
-            configDirectoryURL.deletingLastPathComponent()
-        } else {
-            configDirectoryURL
-        }
-        proc.currentDirectoryURL = workingDirectoryURL
-
-        // `-d` pins mihomo runtime home directory to CatBar working root.
-        // This prevents fallback to ~/.config/mihomo for provider/cache updates.
-        let args = ["-d", workingDirectoryURL.path, "-f", configPath, "-ext-ctl", controller]
-        proc.arguments = args
+        proc.executableURL = URL(fileURLWithPath: context.binaryPath)
+        proc.currentDirectoryURL = context.workingDirectoryURL
+        proc.arguments = context.arguments
 
         let stdout = Pipe()
         let stderr = Pipe()
@@ -233,8 +156,8 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
             let startMessage =
                 "[mihomo started] pid=\(proc.processIdentifier) " +
                 "controller=\(controller) " +
-                "binary=\(binary) " +
-                "workdir=\(workingDirectoryURL.path)"
+                "binary=\(context.binaryPath) " +
+                "workdir=\(context.workingDirectoryURL.path)"
             self.onLog?(startMessage)
             return self.status
         } catch {
@@ -290,14 +213,14 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
         self.onLog?("[mihomo stop] terminate signal sent pid=\(running.processIdentifier)")
         running.terminate()
 
-        if self.waitForProcessExit(running, timeout: 2.0) {
+        if self.processWaiter.waitForExit(running, timeout: 2.0) {
             self.handleProcessTermination(running, code: running.terminationStatus)
             return
         }
 
         self.onLog?("[mihomo stop] force kill pid=\(running.processIdentifier)")
         _ = Darwin.kill(running.processIdentifier, SIGKILL)
-        _ = self.waitForProcessExit(running, timeout: 1.0)
+        _ = self.processWaiter.waitForExit(running, timeout: 1.0)
         self.handleProcessTermination(running, code: running.terminationStatus)
     }
 
@@ -348,14 +271,6 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
         }
     }
 
-    private func waitForProcessExit(_ process: Process, timeout: TimeInterval) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while process.isRunning, Date() < deadline {
-            usleep(50000)
-        }
-        return !process.isRunning
-    }
-
     private func runBlockingOperation<Value: Sendable>(
         on queue: DispatchQueue,
         _ operation: @escaping @Sendable () throws -> Value) async throws -> Value
@@ -383,236 +298,22 @@ final class MihomoProcessManager: MihomoControlling, @unchecked Sendable {
         }
     }
 
-    private func normalizedValidationTimeoutSeconds() -> Int {
-        max(1, Int(self.configValidationTimeout.rounded(.awayFromZero)))
+    private var binaryLocator: MihomoBinaryLocator {
+        MihomoBinaryLocator(
+            workingDirectoryManager: self.workingDirectoryManager,
+            fileManager: self.fileManager,
+            onLog: self.onLog)
+    }
+
+    private var configValidationRunner: MihomoConfigValidationRunner {
+        MihomoConfigValidationRunner(
+            timeout: self.configValidationTimeout,
+            processWaiter: self.processWaiter,
+            onLog: self.onLog)
     }
 
     private func resolveMihomoBinary() throws -> String {
-        try self.workingDirectoryManager.bootstrapDirectories(fileManager: self.fileManager)
-
-        let managedBinaryPath = self.workingDirectoryManager.managedMihomoBinaryURL.path
-
-        if self.fileManager.fileExists(atPath: managedBinaryPath) {
-            try self.ensureExecutableIfNeeded(at: managedBinaryPath)
-            if self.fileManager.isExecutableFile(atPath: managedBinaryPath) {
-                try self.validateBinarySecurity(at: managedBinaryPath)
-                return managedBinaryPath
-            }
-        }
-
-        if let bundledBinaryPath = self.firstBundledExecutableBinaryPath() {
-            try self.validateBinarySecurity(at: bundledBinaryPath)
-            let migratedBinaryPath = try self.copyBundledBinaryToManagedCore(
-                bundledPath: bundledBinaryPath,
-                managedPath: managedBinaryPath)
-            try self.validateBinarySecurity(at: migratedBinaryPath)
-            return migratedBinaryPath
-        }
-
-        guard let bundledCompressedBinaryPath = self.firstBundledCompressedBinaryPath() else {
-            throw MihomoBinaryResolutionError.binaryNotFound(
-                expectedDirectory: self.workingDirectoryManager.coreDirectoryURL.path)
-        }
-
-        try self.validateBinarySecurity(at: bundledCompressedBinaryPath)
-        let migratedBinaryPath = try self.decompressBundledBinaryToManagedCore(
-            compressedPath: bundledCompressedBinaryPath,
-            managedPath: managedBinaryPath)
-        try self.validateBinarySecurity(at: migratedBinaryPath)
-        return migratedBinaryPath
-    }
-
-    private func firstBundledExecutableBinaryPath() -> String? {
-        for candidate in self.bundledBinaryCandidates() where self.fileManager.isExecutableFile(atPath: candidate) {
-            return candidate
-        }
-        return nil
-    }
-
-    private func firstBundledCompressedBinaryPath() -> String? {
-        for candidate in self.bundledCompressedBinaryCandidates() where self.fileManager.fileExists(atPath: candidate) {
-            return candidate
-        }
-        return nil
-    }
-
-    private func bundledBinaryCandidates() -> [String] {
-        let resourceRoots = AppResourceBundleLocator.candidateResourceRoots()
-        var candidates: [String] = []
-
-        for root in resourceRoots {
-            candidates.append(root.appendingPathComponent("bin/mihomo").path)
-            candidates.append(root.appendingPathComponent("Resources/bin/mihomo").path)
-            candidates.append(root.appendingPathComponent("mihomo").path)
-        }
-
-        var deduplicated: [String] = []
-        var seen = Set<String>()
-        for path in candidates {
-            let normalized = URL(fileURLWithPath: path).standardizedFileURL.path
-            if seen.insert(normalized).inserted {
-                deduplicated.append(normalized)
-            }
-        }
-        return deduplicated
-    }
-
-    private func bundledCompressedBinaryCandidates() -> [String] {
-        let resourceRoots = AppResourceBundleLocator.candidateResourceRoots()
-        var candidates: [String] = []
-
-        for root in resourceRoots {
-            candidates.append(root.appendingPathComponent("bin/mihomo.gz").path)
-            candidates.append(root.appendingPathComponent("Resources/bin/mihomo.gz").path)
-            candidates.append(root.appendingPathComponent("mihomo.gz").path)
-        }
-
-        var deduplicated: [String] = []
-        var seen = Set<String>()
-        for path in candidates {
-            let normalized = URL(fileURLWithPath: path).standardizedFileURL.path
-            if seen.insert(normalized).inserted {
-                deduplicated.append(normalized)
-            }
-        }
-        return deduplicated
-    }
-
-    private func copyBundledBinaryToManagedCore(bundledPath: String, managedPath: String) throws -> String {
-        if self.fileManager.fileExists(atPath: managedPath) {
-            try self.fileManager.removeItem(atPath: managedPath)
-        }
-
-        // Keep signed app bundle immutable: only copy core out to user-managed directory.
-        do {
-            try self.fileManager.copyItem(atPath: bundledPath, toPath: managedPath)
-            self.onLog?("[mihomo binary] copied bundled core to \(managedPath)")
-            try self.ensureExecutableIfNeeded(at: managedPath)
-            return managedPath
-        } catch {
-            throw NSError(
-                domain: "CatBar.Core",
-                code: 500,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "failed to migrate mihomo binary to \(managedPath): \(error.localizedDescription)",
-                ])
-        }
-    }
-
-    private func decompressBundledBinaryToManagedCore(compressedPath: String, managedPath: String) throws -> String {
-        let temporaryPath = managedPath + ".tmp"
-        if self.fileManager.fileExists(atPath: temporaryPath) {
-            try self.fileManager.removeItem(atPath: temporaryPath)
-        }
-        if self.fileManager.fileExists(atPath: managedPath) {
-            try self.fileManager.removeItem(atPath: managedPath)
-        }
-
-        self.fileManager.createFile(atPath: temporaryPath, contents: nil)
-        let outputURL = URL(fileURLWithPath: temporaryPath)
-        let outputHandle = try FileHandle(forWritingTo: outputURL)
-        let errorPipe = Pipe()
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/gunzip")
-        process.arguments = ["-c", compressedPath]
-        process.standardOutput = outputHandle
-        process.standardError = errorPipe
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            try outputHandle.close()
-
-            guard process.terminationStatus == 0 else {
-                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                let errorText = String(data: errorData, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown error"
-                try? self.fileManager.removeItem(atPath: temporaryPath)
-                throw NSError(
-                    domain: "CatBar.Core",
-                    code: 500,
-                    userInfo: [
-                        NSLocalizedDescriptionKey:
-                            "failed to decompress bundled mihomo binary from \(compressedPath): \(errorText)",
-                    ])
-            }
-
-            try self.fileManager.moveItem(atPath: temporaryPath, toPath: managedPath)
-            self.onLog?("[mihomo binary] decompressed bundled core to \(managedPath)")
-            try self.ensureExecutableIfNeeded(at: managedPath)
-            return managedPath
-        } catch {
-            try? outputHandle.close()
-            try? self.fileManager.removeItem(atPath: temporaryPath)
-            if let error = error as NSError?, error.domain == "CatBar.Core" {
-                throw error
-            }
-            throw NSError(
-                domain: "CatBar.Core",
-                code: 500,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "failed to migrate compressed mihomo binary to \(managedPath): \(error.localizedDescription)",
-                ])
-        }
-    }
-
-    private func ensureExecutableIfNeeded(at path: String) throws {
-        guard self.fileManager.fileExists(atPath: path) else {
-            throw NSError(
-                domain: "CatBar.Core",
-                code: 404,
-                userInfo: [NSLocalizedDescriptionKey: "mihomo binary not found at \(path)"])
-        }
-
-        guard !self.fileManager.isExecutableFile(atPath: path) else { return }
-        try self.fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
-    }
-
-    private func validateBinarySecurity(at path: String) throws {
-        let url = URL(fileURLWithPath: path)
-        let values = try url.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey])
-
-        if values.isSymbolicLink == true {
-            throw NSError(
-                domain: "CatBar.Core",
-                code: 403,
-                userInfo: [NSLocalizedDescriptionKey: "mihomo binary path must not be a symbolic link: \(path)"])
-        }
-        if values.isRegularFile != true {
-            throw NSError(
-                domain: "CatBar.Core",
-                code: 403,
-                userInfo: [NSLocalizedDescriptionKey: "mihomo binary must be a regular file: \(path)"])
-        }
-
-        let attrs = try FileManager.default.attributesOfItem(atPath: path)
-        let uid = Int(getuid())
-        if let owner = attrs[.ownerAccountID] as? NSNumber {
-            let ownerID = owner.intValue
-            if ownerID != 0, ownerID != uid {
-                throw NSError(
-                    domain: "CatBar.Core",
-                    code: 403,
-                    userInfo: [NSLocalizedDescriptionKey: "mihomo binary owner must be current user or root: \(path)"])
-            }
-        }
-
-        if let perm = attrs[.posixPermissions] as? NSNumber {
-            let mode = perm.intValue
-            // Refuse group-writable or world-writable executables.
-            if (mode & 0o022) != 0 {
-                throw NSError(
-                    domain: "CatBar.Core",
-                    code: 403,
-                    userInfo: [
-                        NSLocalizedDescriptionKey:
-                            "mihomo binary permissions are too permissive " +
-                            "(writable by group/others): \(path)",
-                    ])
-            }
-        }
+        try self.binaryLocator.resolveBinary()
     }
 
     private func wireLogPipe(_ handle: FileHandle) {
