@@ -34,6 +34,7 @@ final class AppSession: ObservableObject {
     @Published private var providerPresentationState = ProviderPresentationState()
     @Published private var systemProxyPresentationState = SystemProxyPresentationState()
     @Published private var runtimeNetworkHealthPresentationState = RuntimeNetworkHealthPresentationState()
+    @Published private var runtimeNetworkHealthRefreshing = false
 
     @Published private var logPresentationState = LogPresentationState()
     @Published private var coreControlPresentationState = CoreControlPresentationState()
@@ -685,6 +686,11 @@ final class AppSession: ObservableObject {
     var runtimeNetworkHealth: RuntimeNetworkHealthPresentationState {
         get { self.runtimeNetworkHealthPresentationState }
         set { self.runtimeNetworkHealthPresentationState = newValue }
+    }
+
+    var isRuntimeNetworkHealthRefreshing: Bool {
+        get { self.runtimeNetworkHealthRefreshing }
+        set { self.runtimeNetworkHealthRefreshing = newValue }
     }
 
     var isTunEnabled: Bool {

@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 extension AppSession {
-    func refreshRuntimeNetworkHealth(autoRepair: Bool = true) async {
+    func refreshRuntimeNetworkHealth(autoRepair: Bool = true, forceProbe: Bool = false) async {
         guard !self.isRemoteTarget else {
             self.resetPresentedRuntimeNetworkHealth()
             return
@@ -10,7 +10,7 @@ extension AppSession {
 
         let systemProxy = await self.evaluateSystemProxyRuntimeHealth(autoRepair: autoRepair)
         let tun = await self.evaluateTunRuntimeHealth(autoRepair: autoRepair)
-        let endpointHealth = await self.evaluateNetworkEndpointHealthPair()
+        let endpointHealth = await self.evaluateNetworkEndpointHealthPair(forceProbe: forceProbe)
         let nextState = RuntimeNetworkHealthPresentationState(
             systemProxy: systemProxy,
             tun: tun,
@@ -136,7 +136,14 @@ extension AppSession {
         return Date().timeIntervalSince(lastAttemptAt) >= self.runtimeNetworkRepairThrottleInterval
     }
 
-    private func evaluateNetworkEndpointHealthPair() async
+    func manuallyRefreshRuntimeNetworkHealth() async {
+        guard !self.isRuntimeNetworkHealthRefreshing else { return }
+        self.isRuntimeNetworkHealthRefreshing = true
+        defer { self.isRuntimeNetworkHealthRefreshing = false }
+        await self.refreshRuntimeNetworkHealth(autoRepair: true, forceProbe: true)
+    }
+
+    private func evaluateNetworkEndpointHealthPair(forceProbe: Bool) async
         -> (domestic: RuntimeNetworkFeatureHealth, global: RuntimeNetworkFeatureHealth)
     {
         guard self.isRuntimeRunning, self.networkReachabilityStatus != .offline else {
@@ -144,7 +151,8 @@ extension AppSession {
             return (unavailable, unavailable)
         }
 
-        if let lastProbeAt = self.lastNetworkEndpointProbePairAt,
+        if !forceProbe,
+           let lastProbeAt = self.lastNetworkEndpointProbePairAt,
            Date().timeIntervalSince(lastProbeAt) < self.runtimeNetworkEndpointProbeInterval
         {
             return (self.runtimeNetworkHealth.domesticAccess, self.runtimeNetworkHealth.globalAccess)

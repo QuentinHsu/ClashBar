@@ -189,7 +189,20 @@ extension MenuBarRootView {
         return SystemSettingsSectionCard(
             title: tr("ui.section.network_health"),
             symbol: "waveform.path.ecg",
-            headerTint: nativeTertiaryLabel)
+            headerTint: nativeTertiaryLabel,
+            headerTrailing: {
+                self.compactAsyncIconButton(
+                    symbol: "arrow.clockwise",
+                    label: tr("ui.action.refresh"),
+                    tint: nativeInfo.opacity(T.Opacity.solid),
+                    baseTint: nativeTertiaryLabel,
+                    isLoading: appSession.isRuntimeNetworkHealthRefreshing,
+                    size: 16,
+                    fontSize: T.FontSize.caption)
+                {
+                    await appSession.manuallyRefreshRuntimeNetworkHealth()
+                }
+            })
         {
             VStack(alignment: .leading, spacing: T.space4) {
                 self.networkHealthRow(self.pathNetworkHealthRow)
