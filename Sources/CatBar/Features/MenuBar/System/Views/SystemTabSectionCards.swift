@@ -140,11 +140,13 @@ extension MenuBarRootView {
 
             Spacer(minLength: 0)
 
-            VStack(alignment: .trailing, spacing: T.space2) {
-                Text(row.statusText)
-                    .font(.app(size: T.FontSize.caption, weight: .semibold))
-                    .foregroundStyle(self.networkHealthColor(for: row.kind))
-                    .lineLimit(1)
+            if let statusText = row.statusText?.trimmedNonEmpty {
+                VStack(alignment: .trailing, spacing: T.space2) {
+                    Text(statusText)
+                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(self.networkHealthColor(for: row.kind))
+                        .lineLimit(1)
+                }
             }
         }
         .menuRowPadding(vertical: T.space4)
@@ -163,10 +165,12 @@ extension MenuBarRootView {
 
                 Spacer(minLength: 0)
 
-                Text(row.statusText)
-                    .font(.app(size: T.FontSize.caption, weight: .semibold))
-                    .foregroundStyle(self.networkHealthColor(for: row.kind))
-                    .lineLimit(1)
+                if let statusText = row.statusText?.trimmedNonEmpty {
+                    Text(statusText)
+                        .font(.app(size: T.FontSize.caption, weight: .semibold))
+                        .foregroundStyle(self.networkHealthColor(for: row.kind))
+                        .lineLimit(1)
+                }
 
                 Toggle("", isOn: isOn)
                     .labelsHidden()

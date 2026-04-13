@@ -172,7 +172,6 @@
 "ui.network_health.status.degraded" = "异常";
 "ui.network_health.status.failed" = "失败";
 "ui.network_health.status.unavailable" = "不可用";
-"ui.network_health.status.disabled" = "已关闭";
 "ui.settings.log_level" = "日志级别";
 "ui.settings.port.port" = "HTTP 端口";
 "ui.settings.port.socks" = "SOCKS 端口";

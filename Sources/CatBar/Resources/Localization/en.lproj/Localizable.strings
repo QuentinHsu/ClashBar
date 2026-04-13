@@ -172,7 +172,6 @@
 "ui.network_health.status.degraded" = "Degraded";
 "ui.network_health.status.failed" = "Failed";
 "ui.network_health.status.unavailable" = "Unavailable";
-"ui.network_health.status.disabled" = "Disabled";
 "ui.settings.log_level" = "Log Level";
 "ui.settings.port.port" = "HTTP Port";
 "ui.settings.port.socks" = "SOCKS Port";

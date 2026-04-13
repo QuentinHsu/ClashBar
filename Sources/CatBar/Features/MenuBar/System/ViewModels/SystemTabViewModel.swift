@@ -22,7 +22,7 @@ struct NetworkHealthSummaryState: Equatable {
 struct NetworkHealthRowState: Equatable, Identifiable {
     let id: String
     let title: String
-    let statusText: String
+    let statusText: String?
     let detail: String?
     let symbol: String
     let kind: SystemFeedbackKind
@@ -178,10 +178,10 @@ enum SystemTabViewModel {
         }
     }
 
-    private static func featureStatusText(session: AppSession, status: RuntimeNetworkFeatureHealthStatus) -> String {
+    private static func featureStatusText(session: AppSession, status: RuntimeNetworkFeatureHealthStatus) -> String? {
         switch status {
         case .disabled:
-            session.tr("ui.network_health.status.disabled")
+            nil
         case .healthy:
             session.tr("ui.network_health.status.healthy")
         case .mismatch:

@@ -50,7 +50,7 @@ final class SystemTabViewModelTests: XCTestCase {
         XCTAssertEqual(summary.symbol, "exclamationmark.triangle.fill")
     }
 
-    func testNetworkHealthRowsExposeDisabledStateForTun() throws {
+    func testNetworkHealthRowsHideDisabledStateForTun() throws {
         let session = self.makeSession()
         session.statusText = "Running"
         session.apiStatus = .healthy
@@ -64,7 +64,7 @@ final class SystemTabViewModelTests: XCTestCase {
         let tunRow = try XCTUnwrap(rows.first { $0.id == "tun" })
 
         XCTAssertEqual(tunRow.kind, .info)
-        XCTAssertEqual(tunRow.statusText, session.tr("ui.network_health.status.disabled"))
+        XCTAssertNil(tunRow.statusText)
         XCTAssertNil(tunRow.detail)
     }
 
