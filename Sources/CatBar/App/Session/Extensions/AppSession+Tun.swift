@@ -13,6 +13,10 @@ enum TunModeError: LocalizedError {
 
 @MainActor
 extension AppSession {
+    private var resolveTunModeToggleExecutionUseCase: ResolveTunModeToggleExecutionUseCase {
+        ResolveTunModeToggleExecutionUseCase()
+    }
+
     private var validateTunPermissionsUseCase: ValidateTunPermissionsUseCase {
         ValidateTunPermissionsUseCase(repository: self.tunPermissionRepository)
     }
@@ -33,30 +37,30 @@ extension AppSession {
                 try await self.ensureTunPermissions(requestIfMissing: true)
             }
 
-            guard self.isRemoteTarget || self.isRuntimeRunning else {
+            switch self.resolveTunModeToggleExecutionUseCase.execute(
+                isRemoteTarget: self.isRemoteTarget,
+                isRuntimeRunning: self.isRuntimeRunning)
+            {
+            case .persistOnly:
                 isTunEnabled = enabled
                 persistEditableSettingsSnapshot()
                 appendLog(
                     level: "info",
                     message: tr("log.tun.toggled", enabled ? tr("log.tun.enabled") : tr("log.tun.disabled")))
-                return
-            }
-            try await self.patchTunConfig(enable: enabled)
-            await self.closeAllConnections()
-
-            let config = try await fetchRuntimeConfigSnapshot()
-            let actualState = config.tunEnabled ?? false
-            isTunEnabled = actualState
-            persistEditableSettingsSnapshot()
-
-            if actualState == enabled {
+            case .patchRuntimeOnly:
+                try await self.applyTunRuntimeChange(enabled: enabled)
+                try await self.syncTunStateAfterRuntimePatch(expectedEnabled: enabled)
                 appendLog(
                     level: "info",
                     message: tr("log.tun.toggled", enabled ? tr("log.tun.enabled") : tr("log.tun.disabled")))
-            } else {
+            case .patchRuntimeAndRestart:
+                try await self.applyTunRuntimeChange(enabled: enabled)
+                try await self.syncTunStateAfterRuntimePatch(expectedEnabled: enabled)
+                await self.restartCore()
+                try await self.verifyTunRuntimeState(expectedEnabled: enabled)
                 appendLog(
-                    level: "error",
-                    message: tr("log.tun.toggle_failed", tr("app.tun.error.runtime_state_mismatch")))
+                    level: "info",
+                    message: tr("log.tun.toggled", enabled ? tr("log.tun.enabled") : tr("log.tun.disabled")))
             }
         } catch {
             appendLog(level: "error", message: tr("log.tun.toggle_failed", self.tunErrorMessage(error)))
@@ -186,6 +190,17 @@ extension AppSession {
         try await self.patchTunConfig(enable: enabled)
         await self.closeAllConnections()
         try await self.verifyTunRuntimeState(expectedEnabled: enabled)
+    }
+
+    func syncTunStateAfterRuntimePatch(expectedEnabled: Bool) async throws {
+        let config = try await fetchRuntimeConfigSnapshot()
+        let actualState = config.tunEnabled ?? false
+        isTunEnabled = actualState
+        persistEditableSettingsSnapshot()
+
+        if actualState != expectedEnabled {
+            throw TunModeError.runtimeStateMismatch(expected: expectedEnabled)
+        }
     }
 
     func verifyTunRuntimeState(expectedEnabled: Bool) async throws {
