@@ -80,6 +80,28 @@ extension MenuBarRootView {
                 kind: .info)
     }
 
+    private var domesticAccessHealthRow: NetworkHealthRowState {
+        SystemTabViewModel.networkHealthRows(session: appSession).first { $0.id == "domestic_access" }
+            ?? NetworkHealthRowState(
+                id: "domestic_access",
+                title: tr("ui.network_health.row.domestic_access"),
+                statusText: tr("ui.network_health.status.unavailable"),
+                detail: nil,
+                symbol: "flag.pattern.checkered.2.crossed",
+                kind: .info)
+    }
+
+    private var globalAccessHealthRow: NetworkHealthRowState {
+        SystemTabViewModel.networkHealthRows(session: appSession).first { $0.id == "global_access" }
+            ?? NetworkHealthRowState(
+                id: "global_access",
+                title: tr("ui.network_health.row.global_access"),
+                statusText: tr("ui.network_health.status.unavailable"),
+                detail: nil,
+                symbol: "globe.asia.australia",
+                kind: .info)
+    }
+
     private var pathNetworkHealthRow: NetworkHealthRowState {
         let summary = SystemTabViewModel.networkHealthSummary(session: appSession)
         return NetworkHealthRowState(
@@ -108,6 +130,13 @@ extension MenuBarRootView {
         HStack(alignment: .top, spacing: T.space8) {
             self.settingsRowLabel(symbol: row.symbol, title: row.title)
                 .layoutPriority(1)
+
+            if let detail = row.detail?.trimmedNonEmpty {
+                Text(detail)
+                    .font(.app(size: T.FontSize.caption, weight: .regular))
+                    .foregroundStyle(nativeTertiaryLabel)
+                    .lineLimit(1)
+            }
 
             Spacer(minLength: 0)
 
@@ -165,6 +194,8 @@ extension MenuBarRootView {
             VStack(alignment: .leading, spacing: T.space4) {
                 self.networkHealthRow(self.pathNetworkHealthRow)
                 self.networkHealthRow(self.coreNetworkHealthRow)
+                self.networkHealthRow(self.domesticAccessHealthRow)
+                self.networkHealthRow(self.globalAccessHealthRow)
             }
             .menuRowPadding(vertical: T.space4)
         }

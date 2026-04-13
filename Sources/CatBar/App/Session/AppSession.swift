@@ -902,6 +902,7 @@ final class AppSession: ObservableObject {
     let launchAtLoginRepository: any LaunchAtLoginRepository
     let workingDirectoryManager: WorkingDirectoryManager
     let networkReachabilityMonitor: NetworkReachabilityMonitor
+    let networkEndpointProbeService: NetworkEndpointProbeService
     let clipboardRepository: any ClipboardRepository
     let remoteMachineStore: RemoteMachineStore
     var apiClient: MihomoAPIClient?
@@ -979,7 +980,9 @@ final class AppSession: ObservableObject {
     let coreFailureAlertThrottleInterval: TimeInterval = 20
     var lastSystemProxyRuntimeRepairAttemptAt: Date?
     var lastTunRuntimeRepairAttemptAt: Date?
+    var lastNetworkEndpointProbePairAt: Date?
     let runtimeNetworkRepairThrottleInterval: TimeInterval = 45
+    let runtimeNetworkEndpointProbeInterval: TimeInterval = 30
     var networkReachabilityStatus: NetworkReachabilityStatus {
         get { self.lifecycleCoordinationState.networkReachabilityStatus }
         set { self.lifecycleCoordinationState.networkReachabilityStatus = newValue }
@@ -1014,6 +1017,7 @@ final class AppSession: ObservableObject {
         configImportService: ConfigImportService = ConfigImportService(),
         appLaunchService: AppLaunchService = AppLaunchService(),
         networkReachabilityMonitor: NetworkReachabilityMonitor = NetworkReachabilityMonitor(),
+        networkEndpointProbeService: NetworkEndpointProbeService = NetworkEndpointProbeService(),
         clipboardRepository: any ClipboardRepository = PasteboardClipboardRepository(),
         remoteMachineStore: RemoteMachineStore = RemoteMachineStore(),
         catbarLogStore: AppLogStore? = nil,
@@ -1027,6 +1031,7 @@ final class AppSession: ObservableObject {
         self.tunPermissionRepository = DefaultTunPermissionRepository(service: tunPermissionService)
         self.launchAtLoginRepository = DefaultLaunchAtLoginRepository(service: appLaunchService)
         self.networkReachabilityMonitor = networkReachabilityMonitor
+        self.networkEndpointProbeService = networkEndpointProbeService
         self.clipboardRepository = clipboardRepository
         self.remoteMachineStore = remoteMachineStore
         self.catbarLogStore = catbarLogStore

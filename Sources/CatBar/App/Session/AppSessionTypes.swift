@@ -556,6 +556,8 @@ struct RuntimeNetworkFeatureHealth: Equatable {
 struct RuntimeNetworkHealthPresentationState: Equatable {
     var systemProxy = RuntimeNetworkFeatureHealth()
     var tun = RuntimeNetworkFeatureHealth()
+    var domesticAccess = RuntimeNetworkFeatureHealth(status: .unavailable)
+    var globalAccess = RuntimeNetworkFeatureHealth(status: .unavailable)
 }
 
 struct SystemProxyPresentationState {

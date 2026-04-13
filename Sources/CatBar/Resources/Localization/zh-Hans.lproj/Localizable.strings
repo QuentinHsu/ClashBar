@@ -163,6 +163,8 @@
 "ui.settings.tun_mode" = "TUN 模式";
 "ui.network_health.row.core" = "内核运行态";
 "ui.network_health.row.path" = "代理链路";
+"ui.network_health.row.domestic_access" = "国内访问";
+"ui.network_health.row.global_access" = "国外访问";
 "ui.network_health.row.system_proxy" = "系统代理";
 "ui.network_health.row.tun" = "TUN 模式";
 "ui.network_health.status.stopped" = "已停止";

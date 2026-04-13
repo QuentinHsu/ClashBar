@@ -10,9 +10,12 @@ extension AppSession {
 
         let systemProxy = await self.evaluateSystemProxyRuntimeHealth(autoRepair: autoRepair)
         let tun = await self.evaluateTunRuntimeHealth(autoRepair: autoRepair)
+        let endpointHealth = await self.evaluateNetworkEndpointHealthPair()
         let nextState = RuntimeNetworkHealthPresentationState(
             systemProxy: systemProxy,
-            tun: tun)
+            tun: tun,
+            domesticAccess: endpointHealth.domestic,
+            globalAccess: endpointHealth.global)
 
         _ = self.applyPresentedRuntimeNetworkHealth(nextState)
     }
@@ -131,5 +134,28 @@ extension AppSession {
     private func shouldAttemptRuntimeRepair(lastAttemptAt: Date?) -> Bool {
         guard let lastAttemptAt else { return true }
         return Date().timeIntervalSince(lastAttemptAt) >= self.runtimeNetworkRepairThrottleInterval
+    }
+
+    private func evaluateNetworkEndpointHealthPair() async
+        -> (domestic: RuntimeNetworkFeatureHealth, global: RuntimeNetworkFeatureHealth)
+    {
+        guard self.isRuntimeRunning, self.networkReachabilityStatus != .offline else {
+            let unavailable = RuntimeNetworkFeatureHealth(status: .unavailable)
+            return (unavailable, unavailable)
+        }
+
+        if let lastProbeAt = self.lastNetworkEndpointProbePairAt,
+           Date().timeIntervalSince(lastProbeAt) < self.runtimeNetworkEndpointProbeInterval
+        {
+            return (self.runtimeNetworkHealth.domesticAccess, self.runtimeNetworkHealth.globalAccess)
+        }
+
+        let domesticTarget = NetworkEndpointProbeTarget(name: "domestic", url: URL(string: "https://qq.com")!)
+        let globalTarget = NetworkEndpointProbeTarget(name: "global", url: URL(string: "https://google.com")!)
+        async let domestic = self.networkEndpointProbeService.probe(domesticTarget)
+        async let global = self.networkEndpointProbeService.probe(globalTarget)
+        let results = await (domestic, global)
+        self.lastNetworkEndpointProbePairAt = Date()
+        return results
     }
 }

@@ -163,6 +163,8 @@
 "ui.settings.tun_mode" = "TUN Mode";
 "ui.network_health.row.core" = "Core Runtime";
 "ui.network_health.row.path" = "Proxy Path";
+"ui.network_health.row.domestic_access" = "Domestic Access";
+"ui.network_health.row.global_access" = "Global Access";
 "ui.network_health.row.system_proxy" = "System Proxy";
 "ui.network_health.row.tun" = "TUN Runtime";
 "ui.network_health.status.stopped" = "Stopped";

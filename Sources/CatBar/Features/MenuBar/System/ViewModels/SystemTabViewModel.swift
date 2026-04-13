@@ -81,7 +81,12 @@ enum SystemTabViewModel {
                 symbol: "xmark.octagon.fill")
         }
 
-        let featureStates = [session.runtimeNetworkHealth.systemProxy.status, session.runtimeNetworkHealth.tun.status]
+        let featureStates = [
+            session.runtimeNetworkHealth.systemProxy.status,
+            session.runtimeNetworkHealth.tun.status,
+            session.runtimeNetworkHealth.domesticAccess.status,
+            session.runtimeNetworkHealth.globalAccess.status,
+        ]
         if featureStates.contains(.mismatch) || featureStates.contains(.unavailable) || session.apiStatus == .degraded {
             return NetworkHealthSummaryState(
                 message: session.tr("ui.network_health.status.degraded"),
@@ -125,6 +130,20 @@ enum SystemTabViewModel {
                 detail: nil,
                 symbol: "shield.lefthalf.filled",
                 kind: self.featureStatusKind(status: session.runtimeNetworkHealth.tun.status)),
+            NetworkHealthRowState(
+                id: "domestic_access",
+                title: session.tr("ui.network_health.row.domestic_access"),
+                statusText: self.featureStatusText(session: session, status: session.runtimeNetworkHealth.domesticAccess.status),
+                detail: "qq.com",
+                symbol: "flag.pattern.checkered.2.crossed",
+                kind: self.featureStatusKind(status: session.runtimeNetworkHealth.domesticAccess.status)),
+            NetworkHealthRowState(
+                id: "global_access",
+                title: session.tr("ui.network_health.row.global_access"),
+                statusText: self.featureStatusText(session: session, status: session.runtimeNetworkHealth.globalAccess.status),
+                detail: "google.com",
+                symbol: "globe.asia.australia",
+                kind: self.featureStatusKind(status: session.runtimeNetworkHealth.globalAccess.status)),
         ]
     }
 

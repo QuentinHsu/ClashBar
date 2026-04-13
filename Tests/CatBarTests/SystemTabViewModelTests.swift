@@ -24,7 +24,9 @@ final class SystemTabViewModelTests: XCTestCase {
         session.apiStatus = .healthy
         session.runtimeNetworkHealth = RuntimeNetworkHealthPresentationState(
             systemProxy: RuntimeNetworkFeatureHealth(status: .healthy, detail: "127.0.0.1:7890"),
-            tun: RuntimeNetworkFeatureHealth(status: .disabled))
+            tun: RuntimeNetworkFeatureHealth(status: .disabled),
+            domesticAccess: RuntimeNetworkFeatureHealth(status: .healthy),
+            globalAccess: RuntimeNetworkFeatureHealth(status: .healthy))
 
         let summary = SystemTabViewModel.networkHealthSummary(session: session)
 
@@ -38,7 +40,9 @@ final class SystemTabViewModelTests: XCTestCase {
         session.apiStatus = .healthy
         session.runtimeNetworkHealth = RuntimeNetworkHealthPresentationState(
             systemProxy: RuntimeNetworkFeatureHealth(status: .mismatch, detail: "mismatch"),
-            tun: RuntimeNetworkFeatureHealth(status: .healthy, detail: "enabled"))
+            tun: RuntimeNetworkFeatureHealth(status: .healthy, detail: "enabled"),
+            domesticAccess: RuntimeNetworkFeatureHealth(status: .healthy),
+            globalAccess: RuntimeNetworkFeatureHealth(status: .healthy))
 
         let summary = SystemTabViewModel.networkHealthSummary(session: session)
 
@@ -52,7 +56,9 @@ final class SystemTabViewModelTests: XCTestCase {
         session.apiStatus = .healthy
         session.runtimeNetworkHealth = RuntimeNetworkHealthPresentationState(
             systemProxy: RuntimeNetworkFeatureHealth(status: .healthy, detail: "127.0.0.1:7890"),
-            tun: RuntimeNetworkFeatureHealth(status: .disabled))
+            tun: RuntimeNetworkFeatureHealth(status: .disabled),
+            domesticAccess: RuntimeNetworkFeatureHealth(status: .healthy),
+            globalAccess: RuntimeNetworkFeatureHealth(status: .mismatch))
 
         let rows = SystemTabViewModel.networkHealthRows(session: session)
         let tunRow = try XCTUnwrap(rows.first { $0.id == "tun" })
@@ -60,6 +66,28 @@ final class SystemTabViewModelTests: XCTestCase {
         XCTAssertEqual(tunRow.kind, .info)
         XCTAssertEqual(tunRow.statusText, session.tr("ui.network_health.status.disabled"))
         XCTAssertNil(tunRow.detail)
+    }
+
+    func testNetworkHealthRowsIncludeDomesticAndGlobalAccess() throws {
+        let session = self.makeSession()
+        session.statusText = "Running"
+        session.apiStatus = .healthy
+        session.runtimeNetworkHealth = RuntimeNetworkHealthPresentationState(
+            systemProxy: RuntimeNetworkFeatureHealth(status: .healthy),
+            tun: RuntimeNetworkFeatureHealth(status: .healthy),
+            domesticAccess: RuntimeNetworkFeatureHealth(status: .healthy),
+            globalAccess: RuntimeNetworkFeatureHealth(status: .mismatch))
+
+        let rows = SystemTabViewModel.networkHealthRows(session: session)
+        let domesticRow = try XCTUnwrap(rows.first { $0.id == "domestic_access" })
+        let globalRow = try XCTUnwrap(rows.first { $0.id == "global_access" })
+
+        XCTAssertEqual(domesticRow.title, session.tr("ui.network_health.row.domestic_access"))
+        XCTAssertEqual(domesticRow.detail, "qq.com")
+        XCTAssertEqual(domesticRow.statusText, session.tr("ui.network_health.status.healthy"))
+        XCTAssertEqual(globalRow.title, session.tr("ui.network_health.row.global_access"))
+        XCTAssertEqual(globalRow.detail, "google.com")
+        XCTAssertEqual(globalRow.statusText, session.tr("ui.network_health.status.degraded"))
     }
 
     private func makeSession() -> AppSession {
