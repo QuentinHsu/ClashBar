@@ -47,6 +47,129 @@ private extension SystemSettingsSectionCard where HeaderTrailing == EmptyView {
 }
 
 extension MenuBarRootView {
+    private var coreNetworkHealthRow: NetworkHealthRowState {
+        SystemTabViewModel.networkHealthRows(session: appSession).first { $0.id == "core" }
+            ?? NetworkHealthRowState(
+                id: "core",
+                title: tr("ui.network_health.row.core"),
+                statusText: tr("ui.network_health.status.unavailable"),
+                detail: nil,
+                symbol: "bolt.horizontal.circle",
+                kind: .info)
+    }
+
+    private var systemProxyHealthRow: NetworkHealthRowState {
+        SystemTabViewModel.networkHealthRows(session: appSession).first { $0.id == "system_proxy" }
+            ?? NetworkHealthRowState(
+                id: "system_proxy",
+                title: tr("ui.network_health.row.system_proxy"),
+                statusText: tr("ui.network_health.status.unavailable"),
+                detail: nil,
+                symbol: "network",
+                kind: .info)
+    }
+
+    private var tunHealthRow: NetworkHealthRowState {
+        SystemTabViewModel.networkHealthRows(session: appSession).first { $0.id == "tun" }
+            ?? NetworkHealthRowState(
+                id: "tun",
+                title: tr("ui.network_health.row.tun"),
+                statusText: tr("ui.network_health.status.unavailable"),
+                detail: nil,
+                symbol: "shield.lefthalf.filled",
+                kind: .info)
+    }
+
+    private var pathNetworkHealthRow: NetworkHealthRowState {
+        let summary = SystemTabViewModel.networkHealthSummary(session: appSession)
+        return NetworkHealthRowState(
+            id: "path",
+            title: tr("ui.network_health.row.path"),
+            statusText: summary.message,
+            detail: nil,
+            symbol: summary.symbol,
+            kind: summary.kind)
+    }
+
+    private func networkHealthColor(for kind: SystemFeedbackKind) -> Color {
+        switch kind {
+        case .error:
+            self.nativeCritical.opacity(T.Opacity.solid)
+        case .warning:
+            self.nativeWarning.opacity(T.Opacity.solid)
+        case .success:
+            self.nativePositive.opacity(T.Opacity.solid)
+        case .info:
+            self.nativeInfo.opacity(T.Opacity.solid)
+        }
+    }
+
+    private func networkHealthRow(_ row: NetworkHealthRowState) -> some View {
+        HStack(alignment: .top, spacing: T.space8) {
+            self.settingsRowLabel(symbol: row.symbol, title: row.title)
+                .layoutPriority(1)
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: T.space2) {
+                Text(row.statusText)
+                    .font(.app(size: T.FontSize.caption, weight: .semibold))
+                    .foregroundStyle(self.networkHealthColor(for: row.kind))
+                    .lineLimit(1)
+            }
+        }
+        .menuRowPadding(vertical: T.space4)
+    }
+
+    private func proxyFeatureControlCard(
+        _ row: NetworkHealthRowState,
+        isOn: Binding<Bool>,
+        isDisabled: Bool,
+        hint: String? = nil) -> some View
+    {
+        VStack(alignment: .leading, spacing: T.space4) {
+            HStack(alignment: .center, spacing: T.space8) {
+                self.settingsRowLabel(symbol: row.symbol, title: row.title)
+                    .layoutPriority(1)
+
+                Spacer(minLength: 0)
+
+                Text(row.statusText)
+                    .font(.app(size: T.FontSize.caption, weight: .semibold))
+                    .foregroundStyle(self.networkHealthColor(for: row.kind))
+                    .lineLimit(1)
+
+                Toggle("", isOn: isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(isDisabled)
+            }
+
+            if let hint = hint?.trimmedNonEmpty {
+                self.settingsInlineHintRow(
+                    text: hint,
+                    color: self.nativeCritical.opacity(T.Opacity.solid),
+                    symbol: "exclamationmark.triangle.fill")
+            }
+        }
+        .menuRowPadding(vertical: T.space6)
+    }
+
+    var networkHealthSectionCard: some View {
+        return SystemSettingsSectionCard(
+            title: tr("ui.section.network_health"),
+            symbol: "waveform.path.ecg",
+            headerTint: nativeTertiaryLabel)
+        {
+            VStack(alignment: .leading, spacing: T.space4) {
+                self.networkHealthRow(self.pathNetworkHealthRow)
+                self.networkHealthRow(self.coreNetworkHealthRow)
+            }
+            .menuRowPadding(vertical: T.space4)
+        }
+    }
+
     var systemCoreToggleItems: [(id: String, title: String, symbol: String, isOn: Binding<Bool>)] {
         [
             (
@@ -117,27 +240,19 @@ extension MenuBarRootView {
             }
 
             if !appSession.isRemoteTarget {
-                self.settingsToggleRow(
-                    tr("ui.quick.system_proxy"),
-                    symbol: "network",
+                self.proxyFeatureControlCard(
+                    self.systemProxyHealthRow,
                     isOn: Binding(
                         get: { appSession.isSystemProxyEnabled },
                         set: { value in
                             Task { await appSession.toggleSystemProxy(value) }
                         }),
-                    isDisabled: appSession.isProxySyncing)
-
-                if let proxyHint = appSession.systemProxyOpenFailureHint?.trimmedNonEmpty {
-                    self.settingsInlineHintRow(
-                        text: "\(tr("app.system_proxy.alert.title")): \(proxyHint)",
-                        color: self.nativeCritical.opacity(T.Opacity.solid),
-                        symbol: "exclamationmark.triangle.fill")
-                }
+                    isDisabled: appSession.isProxySyncing,
+                    hint: appSession.systemProxyOpenFailureHint.map { "\(tr("app.system_proxy.alert.title")): \($0)" })
             }
 
-            self.settingsToggleRow(
-                tr("ui.quick.tun_mode"),
-                symbol: "shield.lefthalf.filled",
+            self.proxyFeatureControlCard(
+                self.tunHealthRow,
                 isOn: Binding(
                     get: { appSession.isTunEnabled },
                     set: { value in

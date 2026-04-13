@@ -270,6 +270,8 @@ extension MenuBarRootView {
             nativeWarning.opacity(T.Opacity.solid)
         case .success:
             nativePositive.opacity(T.Opacity.solid)
+        case .info:
+            nativeInfo.opacity(T.Opacity.solid)
         }
         return (feedback.message, color, feedback.symbol)
     }
@@ -411,6 +413,7 @@ extension MenuBarRootView {
 
     var systemTabBody: some View {
         return VStack(alignment: .leading, spacing: T.space6) {
+            self.networkHealthSectionCard
             self.proxyControlSettingsSectionCard
             self.appSettingsSectionCard
             self.coreSettingsSectionCard

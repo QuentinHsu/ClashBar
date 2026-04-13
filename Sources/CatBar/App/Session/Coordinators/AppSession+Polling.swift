@@ -180,6 +180,9 @@ extension AppSession {
             if !self.isRemoteTarget, self.hasSystemProxyOpenIntent {
                 await self.refreshSystemProxyStatus()
             }
+            if !self.isRemoteTarget {
+                await self.refreshRuntimeNetworkHealth()
+            }
         }
     }
 
@@ -259,6 +262,7 @@ extension AppSession {
             await refreshProvidersAndRules()
             if !self.isRemoteTarget {
                 await self.refreshSystemProxyStatus()
+                await self.refreshRuntimeNetworkHealth()
             }
         case .nodes:
             await refreshProvidersAndRules()
@@ -267,6 +271,7 @@ extension AppSession {
         case .system:
             if !self.isRemoteTarget {
                 await self.refreshSystemProxyStatus()
+                await self.refreshRuntimeNetworkHealth()
             }
         case .connections, .logs:
             break
@@ -345,8 +350,6 @@ extension AppSession {
                 systemProxyActiveDisplay = nil
             }
             await self.refreshSystemProxyHelperRuntimeSnapshot()
-            self.systemProxyHelperFailureReason = nil
-            self.systemProxyHelperFailureMessage = nil
         } catch {
             appendLog(level: "error", message: tr("log.system_proxy.read_failed", systemProxyErrorMessage(error)))
             await self.refreshSystemProxyHelperStatus()

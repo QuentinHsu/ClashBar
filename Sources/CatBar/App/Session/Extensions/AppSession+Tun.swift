@@ -62,6 +62,8 @@ extension AppSession {
             appendLog(level: "error", message: tr("log.tun.toggle_failed", self.tunErrorMessage(error)))
             await self.refreshTunStatusFromRuntimeConfig()
         }
+
+        await self.refreshRuntimeNetworkHealth(autoRepair: false)
     }
 
     func prepareTunOverlayForCoreStartup(_ overlay: EditableSettingsSnapshot) async throws -> EditableSettingsSnapshot {

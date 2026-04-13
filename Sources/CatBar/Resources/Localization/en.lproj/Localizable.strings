@@ -110,6 +110,7 @@
 "ui.section.local_nodes" = "Local Nodes";
 "ui.section.basic_settings" = "Basic Settings";
 "ui.section.app_settings" = "App Settings";
+"ui.section.network_health" = "Network Health";
 "ui.section.proxy_ports" = "Proxy Ports";
 "ui.section.maintenance" = "Core Operations";
 
@@ -160,6 +161,16 @@
 "ui.settings.ipv6" = "IPv6";
 "ui.settings.tcp_concurrent" = "TCP Concurrent";
 "ui.settings.tun_mode" = "TUN Mode";
+"ui.network_health.row.core" = "Core Runtime";
+"ui.network_health.row.path" = "Proxy Path";
+"ui.network_health.row.system_proxy" = "System Proxy";
+"ui.network_health.row.tun" = "TUN Runtime";
+"ui.network_health.status.stopped" = "Stopped";
+"ui.network_health.status.healthy" = "Healthy";
+"ui.network_health.status.degraded" = "Degraded";
+"ui.network_health.status.failed" = "Failed";
+"ui.network_health.status.unavailable" = "Unavailable";
+"ui.network_health.status.disabled" = "Disabled";
 "ui.settings.log_level" = "Log Level";
 "ui.settings.port.port" = "HTTP Port";
 "ui.settings.port.socks" = "SOCKS Port";
@@ -331,6 +342,8 @@
 "log.system_proxy.startup_repaired" = "Startup check fixed system proxy to %@:%d";
 "log.system_proxy.startup_repair_failed" = "Startup system proxy check failed: %@";
 "log.system_proxy.helper_failed" = "System proxy helper unhealthy: %@";
+"log.system_proxy.runtime_repaired" = "Runtime check reapplied system proxy to %@";
+"log.system_proxy.runtime_repair_failed" = "Runtime system proxy repair failed: %@";
 "log.tun.toggled" = "TUN mode %@";
 "log.tun.enabled" = "enabled";
 "log.tun.disabled" = "disabled";
@@ -339,6 +352,8 @@
 "log.tun.startup_check_failed" = "Startup TUN permission check failed: %@";
 "log.tun.permission_requesting" = "Requesting administrator permissions for TUN mode...";
 "log.tun.permission_granted" = "TUN permissions granted.";
+"log.tun.runtime_repaired" = "Runtime check restored TUN mode.";
+"log.tun.runtime_repair_failed" = "Runtime TUN repair failed: %@";
 "log.proxy_export.copied" = "Proxy export command copied";
 "log.provider.node_test_failed" = "Provider node test failed (%@/%@): %@";
 "log.provider.healthcheck_failed" = "Provider healthcheck failed (%@): %@";

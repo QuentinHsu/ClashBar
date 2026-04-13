@@ -797,6 +797,7 @@ extension AppSession {
         }
 
         self.appendSystemProxyToggleLogIfNeeded(enabled: enabled, shouldAppend: plan.success.shouldAppendToggleLog)
+        await self.refreshRuntimeNetworkHealth(autoRepair: false)
     }
 
     private func handleSystemProxyToggleFailure(
@@ -818,6 +819,8 @@ extension AppSession {
         } else if plan.failure.shouldResetObservedState {
             self.resetSystemProxyObservedState()
         }
+
+        await self.refreshRuntimeNetworkHealth(autoRepair: false)
     }
 
     private func performSystemProxyHelperRefresh(_ refresh: SystemProxyToggleHelperRefresh) async {

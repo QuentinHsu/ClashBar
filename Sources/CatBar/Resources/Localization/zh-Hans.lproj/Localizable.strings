@@ -110,6 +110,7 @@
 "ui.section.local_nodes" = "本地节点";
 "ui.section.basic_settings" = "基础设置";
 "ui.section.app_settings" = "应用设置";
+"ui.section.network_health" = "网络健康";
 "ui.section.proxy_ports" = "代理端口";
 "ui.section.maintenance" = "内核操作";
 
@@ -160,6 +161,16 @@
 "ui.settings.ipv6" = "IPv6";
 "ui.settings.tcp_concurrent" = "TCP 并发";
 "ui.settings.tun_mode" = "TUN 模式";
+"ui.network_health.row.core" = "内核运行态";
+"ui.network_health.row.path" = "代理链路";
+"ui.network_health.row.system_proxy" = "系统代理";
+"ui.network_health.row.tun" = "TUN 模式";
+"ui.network_health.status.stopped" = "已停止";
+"ui.network_health.status.healthy" = "正常";
+"ui.network_health.status.degraded" = "异常";
+"ui.network_health.status.failed" = "失败";
+"ui.network_health.status.unavailable" = "不可用";
+"ui.network_health.status.disabled" = "已关闭";
 "ui.settings.log_level" = "日志级别";
 "ui.settings.port.port" = "HTTP 端口";
 "ui.settings.port.socks" = "SOCKS 端口";
@@ -331,6 +342,8 @@
 "log.system_proxy.startup_repaired" = "启动时发现系统代理与目标不一致，已修正为 %@:%d";
 "log.system_proxy.startup_repair_failed" = "启动时校验系统代理失败: %@";
 "log.system_proxy.helper_failed" = "系统代理 helper 状态异常: %@";
+"log.system_proxy.runtime_repaired" = "运行期检测已重新应用系统代理到 %@";
+"log.system_proxy.runtime_repair_failed" = "运行期修复系统代理失败: %@";
 "log.tun.toggled" = "TUN 模式%@";
 "log.tun.enabled" = "已开启";
 "log.tun.disabled" = "已关闭";
@@ -339,6 +352,8 @@
 "log.tun.startup_check_failed" = "启动时校验 TUN 权限失败: %@";
 "log.tun.permission_requesting" = "正在请求管理员权限以启用 TUN 模式...";
 "log.tun.permission_granted" = "TUN 权限授予成功。";
+"log.tun.runtime_repaired" = "运行期检测已恢复 TUN 模式。";
+"log.tun.runtime_repair_failed" = "运行期修复 TUN 失败: %@";
 "log.proxy_export.copied" = "已复制代理导出命令";
 "log.provider.node_test_failed" = "Provider 节点测试失败 (%@/%@): %@";
 "log.provider.healthcheck_failed" = "Provider 健康检查失败（%@）: %@";

@@ -33,6 +33,7 @@ final class AppSession: ObservableObject {
     @Published private var proxyLatencyPresentationState = ProxyLatencyPresentationState()
     @Published private var providerPresentationState = ProviderPresentationState()
     @Published private var systemProxyPresentationState = SystemProxyPresentationState()
+    @Published private var runtimeNetworkHealthPresentationState = RuntimeNetworkHealthPresentationState()
 
     @Published private var logPresentationState = LogPresentationState()
     @Published private var coreControlPresentationState = CoreControlPresentationState()
@@ -143,6 +144,18 @@ final class AppSession: ObservableObject {
 
     func updatePresentedTrafficTotals(from snapshot: TrafficSnapshot, now: Date) {
         self.runtimeMetricsPresentationState.updateTrafficTotals(from: snapshot, now: now)
+    }
+
+    func applyPresentedRuntimeNetworkHealth(
+        _ state: RuntimeNetworkHealthPresentationState) -> RuntimeNetworkHealthPresentationState
+    {
+        let previous = self.runtimeNetworkHealthPresentationState
+        self.runtimeNetworkHealthPresentationState = state
+        return previous
+    }
+
+    func resetPresentedRuntimeNetworkHealth() {
+        self.runtimeNetworkHealthPresentationState = RuntimeNetworkHealthPresentationState()
     }
 
     func applyPresentedRuntimeConfigSnapshot(
@@ -669,6 +682,11 @@ final class AppSession: ObservableObject {
         set { self.systemProxyPresentationState.openFailureHint = newValue }
     }
 
+    var runtimeNetworkHealth: RuntimeNetworkHealthPresentationState {
+        get { self.runtimeNetworkHealthPresentationState }
+        set { self.runtimeNetworkHealthPresentationState = newValue }
+    }
+
     var isTunEnabled: Bool {
         get { self.settingsPresentationState.tunEnabled }
         set { self.settingsPresentationState.tunEnabled = newValue }
@@ -959,6 +977,9 @@ final class AppSession: ObservableObject {
     var lastCoreFailureAlertKey: String?
     var lastCoreFailureAlertAt: Date?
     let coreFailureAlertThrottleInterval: TimeInterval = 20
+    var lastSystemProxyRuntimeRepairAttemptAt: Date?
+    var lastTunRuntimeRepairAttemptAt: Date?
+    let runtimeNetworkRepairThrottleInterval: TimeInterval = 45
     var networkReachabilityStatus: NetworkReachabilityStatus {
         get { self.lifecycleCoordinationState.networkReachabilityStatus }
         set { self.lifecycleCoordinationState.networkReachabilityStatus = newValue }
