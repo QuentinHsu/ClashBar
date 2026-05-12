@@ -350,7 +350,7 @@ extension AppSession {
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = tr("app.config.validation_failed.title")
-        alert.informativeText = tr("app.config.validation_failed.message", fileName, details)
+        alert.setScrollableInformativeText(tr("app.config.validation_failed.message", fileName, details))
         alert.addButton(withTitle: tr("ui.action.ok"))
         self.prepareModalWindowPresentation()
         self.configureModalWindow(alert.window)
@@ -393,7 +393,7 @@ extension AppSession {
         let alert = NSAlert()
         alert.alertStyle = style
         alert.messageText = title
-        alert.informativeText = message
+        alert.setScrollableInformativeText(message)
         alert.addButton(withTitle: tr("ui.action.ok"))
         self.prepareModalWindowPresentation()
         self.configureModalWindow(alert.window)
