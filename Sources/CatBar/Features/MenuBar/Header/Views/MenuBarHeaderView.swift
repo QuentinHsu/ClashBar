@@ -58,6 +58,14 @@ extension MenuBarRootView {
 
             HStack(spacing: MenuBarLayoutTokens.space6) {
                 self.compactTopIcon(
+                    appSession.isPinned ? "pin.fill" : "pin",
+                    label: appSession.isPinned ? tr("ui.action.unpin") : tr("ui.action.pin"),
+                    toneOverride: appSession.isPinned ? nativeInfo : nativeTertiaryLabel)
+                {
+                    appSession.togglePinned()
+                }
+
+                self.compactTopIcon(
                     "arrow.clockwise",
                     label: appSession.primaryCoreActionLabel,
                     toneOverride: nativeInfo)

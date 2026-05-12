@@ -744,6 +744,7 @@ struct InterfacePresentationState {
     var isPanelPresented = false
     var isQuittingApp = false
     var activeMenuTab: RootTab = .proxy
+    var isPinned = false
 
     mutating func setPanelPresented(_ presented: Bool) -> Bool {
         guard self.isPanelPresented != presented else { return false }
@@ -761,6 +762,10 @@ struct InterfacePresentationState {
         guard !self.isQuittingApp else { return false }
         self.isQuittingApp = true
         return true
+    }
+
+    mutating func setPinned(_ pinned: Bool) {
+        self.isPinned = pinned
     }
 }
 

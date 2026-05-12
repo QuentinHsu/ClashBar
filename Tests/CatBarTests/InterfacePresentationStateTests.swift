@@ -25,4 +25,13 @@ final class InterfacePresentationStateTests: XCTestCase {
         XCTAssertFalse(state.beginQuitting())
         XCTAssertTrue(state.isQuittingApp)
     }
+
+    func testSetPinnedUpdatesValue() {
+        var state = InterfacePresentationState()
+
+        state.setPinned(true)
+        XCTAssertTrue(state.isPinned)
+        state.setPinned(false)
+        XCTAssertFalse(state.isPinned)
+    }
 }

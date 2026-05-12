@@ -38,7 +38,7 @@ final class AppSession: ObservableObject {
 
     @Published private var logPresentationState = LogPresentationState()
     @Published private var coreControlPresentationState = CoreControlPresentationState()
-    @Published private var interfacePresentationState = InterfacePresentationState()
+    @Published private(set) var interfacePresentationState = InterfacePresentationState()
     @Published private var launchAtLoginPresentationState = LaunchAtLoginPresentationState()
     @Published private var appReleasePresentationState = AppReleasePresentationState()
     private var lifecycleCoordinationState = LifecycleCoordinationState()
@@ -816,6 +816,15 @@ final class AppSession: ObservableObject {
     var isPanelPresented: Bool {
         get { self.interfacePresentationState.isPanelPresented }
         set { self.interfacePresentationState.isPanelPresented = newValue }
+    }
+
+    var isPinned: Bool {
+        get { self.interfacePresentationState.isPinned }
+        set { self.interfacePresentationState.isPinned = newValue }
+    }
+
+    func togglePinned() {
+        self.interfacePresentationState.setPinned(!self.isPinned)
     }
 
     var isQuittingApp: Bool {
