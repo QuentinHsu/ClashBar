@@ -49,6 +49,7 @@ final class StatusItemController: NSObject {
 
     private var changeCancellable: AnyCancellable?
     private var layoutCancellable: AnyCancellable?
+    private var pinStateCancellable: AnyCancellable?
     private var refreshWorkItem: DispatchWorkItem?
     private var pendingDisplay: MenuBarDisplay?
     private var pendingRenderKey: StatusItemRenderKey?
@@ -100,6 +101,7 @@ final class StatusItemController: NSObject {
         self.panelStabilizationTask = nil
         self.changeCancellable?.cancel()
         self.layoutCancellable?.cancel()
+        self.pinStateCancellable?.cancel()
         self.stopGlobalMonitor()
         self.stopObservingScreenParameters()
         self.unloadPopoverContent()
@@ -208,6 +210,24 @@ final class StatusItemController: NSObject {
             .sink { [weak self] display in
                 self?.scheduleRefresh(display: display)
             }
+
+        self.pinStateCancellable = self.appSession.$interfacePresentationState
+            .map(\.isPinned)
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isPinned in
+                self?.handlePinStateChanged(isPinned: isPinned)
+            }
+    }
+
+    private func handlePinStateChanged(isPinned: Bool) {
+        if isPinned {
+            self.panel.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
+            self.panel.hidesOnDeactivate = false
+        } else {
+            self.panel.collectionBehavior = [.transient, .moveToActiveSpace, .ignoresCycle]
+            self.panel.hidesOnDeactivate = false
+        }
     }
 
     private func bindPopoverLayout() {
@@ -320,7 +340,10 @@ final class StatusItemController: NSObject {
             .rightMouseDown,
         ]) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.closePopover(nil)
+                guard let self else { return }
+                if !self.appSession.isPinned {
+                    self.closePopover(nil)
+                }
             }
         }
     }

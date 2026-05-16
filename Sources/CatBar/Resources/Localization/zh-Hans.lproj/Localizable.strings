@@ -421,3 +421,5 @@
 "fmt.expiry_short.today" = "今天过期";
 "fmt.expiry_short.days" = "剩 %d 天";
 "fmt.expiry_short.long_term" = "长期有效";
+"ui.action.pin" = "固定";
+"ui.action.unpin" = "取消固定";

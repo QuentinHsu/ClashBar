@@ -489,7 +489,7 @@ extension AppSession {
         alert.messageText = success
             ? tr("app.config.remote_import.alert.success.title")
             : tr("app.config.remote_import.alert.failure.title")
-        alert.informativeText = message
+        alert.setScrollableInformativeText(message)
         alert.addButton(withTitle: tr("ui.action.ok"))
         self.prepareModalWindowPresentation()
         self.configureModalWindow(alert.window)
